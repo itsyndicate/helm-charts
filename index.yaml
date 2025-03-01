@@ -3,6 +3,16 @@ entries:
   cronjobs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-03-01T02:06:48.732706839Z"
+    description: A Helm chart for Kubernetes
+    digest: 3bd7a9cf83f981c2554f5f92a4cc0edbf219a194fe12da790b2f26f70540dd18
+    name: cronjobs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/cronjobs-0.1.1/cronjobs-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-03-01T01:55:04.901817735Z"
     description: A Helm chart for Kubernetes
     digest: bb69fbbf71eac569996cfbb3019326143fea3702c4af219ad7e94f9ff1b6979b
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/cronjobs-0.1.0/cronjobs-0.1.0.tgz
     version: 0.1.0
-generated: "2025-03-01T01:55:04.901824568Z"
+generated: "2025-03-01T02:06:48.732714122Z"
