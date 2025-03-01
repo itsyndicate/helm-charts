@@ -1,0 +1,201 @@
+# -- Number of replicas to sping up
+replicaCount: 1
+# -- Secret that used to store docker registry credentials
+imagePullSecrets: [ ]
+# -- Overrides release name
+nameOverride: ""
+# -- Overrides full release name
+fullnameOverride: ""
+# -- Service Account
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # -- Annotations to add to the service account
+  annotations: { }
+  # -- The name of the service account to use.
+  name: ""
+# -- Annotations to add to the pod
+podAnnotations: { }
+# -- Labels to add to the pod
+podLabels: { }
+# -- Security context of the pod
+podSecurityContext: { }
+# fsGroup: 2000
+
+# -- NginX Specific Configurations
+# @section -- NginX Settings
+# @default -- A complex object. Please check values below
+nginx:
+  # -- NginX image settings
+  # @section -- NginX Settings
+  image:
+    repository: nginx
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag whose default is the chart appVersion
+    # @section -- NginX Settings
+    tag: ""
+  # -- NginX container security context
+  # @section -- NginX Settings
+  securityContext: { }
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+  # -- NginX container resources
+  # @section -- NginX Settings
+  resources: { }
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # -- NginX container liveness probe
+  # @section -- NginX Settings
+  #  livenessProbe:
+  #    httpGet:
+  #      path: /
+  #      port: http
+  # -- NginX container readiness probe
+  # @section -- NginX Settings
+  #  readinessProbe:
+  #    httpGet:
+  #      path: /
+  #      port: http
+  # -- NginX container additional volumes
+  # @section -- NginX Settings
+  volumes: [ ]
+  # - name: foo
+  #   secret:
+  #     secretName: mysecret
+  #     optional: false
+
+  # -- NginX container additional volumes mounts
+  # @section -- NginX Settings
+  volumeMounts: [ ]
+  # - name: foo
+  #   mountPath: "/etc/foo"
+  #   readOnly: true
+
+# -- Next.js Specific Configurations
+# @section -- Next.js Settings
+# @default -- A complex object. Please check values below
+nextjs:
+  # -- Next.js image settings
+  # @section -- Next.js Settings
+  image:
+    repository: nextjs
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag whose default is the chart appVersion
+    # @section -- Next.js Settings
+    tag: ""
+  # -- Next.js container security context
+  # @section -- Next.js Settings
+  securityContext: { }
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+  # -- Next.js container resources
+  # @section -- Next.js Settings
+  resources: { }
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # -- Next.js container liveness probe
+  # @section -- Next.js Settings
+  #  livenessProbe:
+  #    httpGet:
+  #      path: /
+  #      port: http
+  # -- Next.js container readiness probe
+  # @section -- Next.js Settings
+  #  readinessProbe:
+  #      httpGet:
+  #        path: /
+  #        port: http
+  #    initialDelaySeconds: 5
+  #    periodSeconds: 5
+  # -- Next.js container additional volumes
+  # @section -- Next.js Settings
+  volumes: [ ]
+  # - name: foo
+  #   secret:
+  #     secretName: mysecret
+  #     optional: false
+
+  # -- Next.js container additional volumes mounts
+  # @section -- Next.js Settings
+  volumeMounts: [ ]
+  # - name: foo
+  #   mountPath: "/etc/foo"
+  #   readOnly: true
+  # -- Next.js environment variables
+  # @section -- Next.js Settings
+  port: 3000
+  env:
+    # -- Use AWS secrets manager ref. Works with external-secrets operator
+    # @section -- Next.js Settings
+    envFromSecretsManager:
+      enabled: false
+      secretPath: dev/example-com/env-secrets
+    # -- Extra env variables
+    # @section -- Next.js Settings
+    variables:
+      APP_DOMAIN: "example.com"
+
+
+# -- Service settings
+# @section -- Networking Settings
+service:
+  type: ClusterIP
+  port: 80
+# -- Ingress settings
+# @section -- Networking Settings
+ingress:
+  # -- Enables ingress when true
+  enabled: false
+  className: ""
+  annotations: { }
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: [ ]
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+# -- Autoscaling settings
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# -- Node selector settings
+nodeSelector: { }
+# -- Tolerations settings
+tolerations: [ ]
+# -- Affinity settings
+affinity: { }
