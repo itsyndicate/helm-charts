@@ -1,0 +1,71 @@
+{{- if .Values.django.migrationJob.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "django.fullname" . }}-migration
+  labels:
+    app.kubernetes.io/component: migrate-job
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    #    ttlSecondsAfterFinished: 60
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "django.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.django.securityContext | nindent 12 }}
+          image: "{{ .Values.django.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ include "django.fullname" . }}-env-migration-secrets
+            {{- if .Values.django.env.envFromSecretsManager.enabled }}
+            - secretRef:
+                name: {{ include "django.fullname" . }}-env-migration-ext-secrets
+            {{- end }}
+          command: [ "/bin/bash", "-c" ]
+          args:
+            - touch /tmp/migrate.lock; while [ -f /tmp/migrate.lock ]; do sleep 5; done; exit 0
+          resources:
+            {{- toYaml .Values.django.resources | nindent 12 }}
+          {{- with .Values.django.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.django.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+{{- end -}}

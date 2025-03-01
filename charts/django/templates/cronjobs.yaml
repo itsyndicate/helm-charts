@@ -1,0 +1,66 @@
+{{- range $cron := $.Values.django.cronJobs }}
+{{- if $cron.enabled -}}
+---
+{{- $cronName := $cron.name | replace "_" "-" -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "django.fullname" $ }}-{{ $cronName }}
+spec:
+  schedule: {{ $cron.cronSchedule | quote }}
+  concurrencyPolicy: {{ $cron.concurrencyPolicy | default "Forbid" }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          serviceAccountName: {{ include "django.serviceAccountName" $ }}
+          securityContext:
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: {{ $.Chart.Name }}-{{ $cronName }}
+              securityContext:
+                {{- toYaml $cron.securityContext | nindent 16 }}
+              image: "{{ $.Values.django.image.repository }}:{{ $.Values.django.image.tag | default $.Chart.AppVersion }}"
+              imagePullPolicy: {{ $.Values.django.image.pullPolicy }}
+              {{- if $cron.containerCommand }}
+              command: {{- range $cron.containerCommand }}
+                - {{ . | quote }} {{- end}}
+              {{- end }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "django.fullname" $ }}-env-secrets
+                {{- if $.Values.django.env.envFromSecretsManager.enabled }}
+                - secretRef:
+                    name: {{ include "django.fullname" $ }}-env-ext-secrets
+                {{- end }}
+              volumeMounts:
+                {{- with $cron.extraVolumeMounts }}
+                {{- toYaml . | nindent 12 }}
+                {{- end }}
+              {{- with $cron.resources }}
+              resources:
+                {{- toYaml . | nindent 14 }}
+              {{- end }}
+          {{- with $cron.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with $cron.affinity }}
+          affinity:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with $cron.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          volumes:
+            {{- with $cron.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          restartPolicy: Never
+{{- end }}
+{{ end }}

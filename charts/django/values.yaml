@@ -1,0 +1,288 @@
+# -- Number of replicas to sping up
+replicaCount: 1
+# -- Secret that used to store docker registry credentials
+imagePullSecrets: [ ]
+# -- Overrides release name
+nameOverride: ""
+# -- Overrides full release name
+fullnameOverride: ""
+# -- Service Account
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # -- Annotations to add to the service account
+  annotations: { }
+  # -- The name of the service account to use.
+  name: ""
+# -- Annotations to add to the pod
+podAnnotations: { }
+# -- Labels to add to the pod
+podLabels: { }
+# -- Security context of the pod
+podSecurityContext: { }
+# fsGroup: 2000
+
+# -- NginX Specific Configurations
+# @section -- NginX Settings
+# @default -- A complex object. Please check values below
+nginx:
+  # -- NginX image settings
+  # @section -- NginX Settings
+  image:
+    repository: nginx
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag whose default is the chart appVersion
+    # @section -- NginX Settings
+    tag: ""
+  # -- NginX container security context
+  # @section -- NginX Settings
+  securityContext: { }
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+  # -- NginX container resources
+  # @section -- NginX Settings
+  resources: { }
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # -- NginX container liveness probe
+  # @section -- NginX Settings
+  #  livenessProbe:
+  #    httpGet:
+  #      path: /
+  #      port: http
+  # -- NginX container readiness probe
+  # @section -- NginX Settings
+  #  readinessProbe:
+  #    httpGet:
+  #      path: /
+  #      port: http
+  # -- NginX container additional volumes
+  # @section -- NginX Settings
+  volumes: [ ]
+  # - name: foo
+  #   secret:
+  #     secretName: mysecret
+  #     optional: false
+
+  # -- NginX container additional volumes mounts
+  # @section -- NginX Settings
+  volumeMounts: [ ]
+  # - name: foo
+  #   mountPath: "/etc/foo"
+  #   readOnly: true
+
+# -- Django Specific Configurations
+# @section -- Django Settings
+# @default -- A complex object. Please check values below
+django:
+  # -- Django image settings
+  # @section -- Django Settings
+  image:
+    repository: django
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag whose default is the chart appVersion
+    # @section -- Django Settings
+    tag: ""
+  # -- Django container security context
+  # @section -- Django Settings
+  securityContext: { }
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+  # -- Django container resources
+  # @section -- Django Settings
+  resources: { }
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # -- Django container liveness probe
+  # @section -- Django Settings
+  #  livenessProbe:
+  #    httpGet:
+  #      path: /
+  #      port: http
+  # -- Django container readiness probe
+  # @section -- Django Settings
+  readinessProbe:
+    exec:
+      command:
+        - ls
+        - /tmp/uvicorn.sock
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  # -- Django container additional volumes
+  # @section -- Django Settings
+  volumes: [ ]
+  # - name: foo
+  #   secret:
+  #     secretName: mysecret
+  #     optional: false
+
+  # -- Django container additional volumes mounts
+  # @section -- Django Settings
+  volumeMounts: [ ]
+  # - name: foo
+  #   mountPath: "/etc/foo"
+  #   readOnly: true
+  # -- Django environment variables
+  # @section -- Django Settings
+  env:
+    # -- Use AWS secrets manager ref. Works with external-secrets operator
+    # @section -- Django Settings
+    envFromSecretsManager:
+      enabled: false
+      secretPath: dev/example-com/env-secrets
+    # -- Extra env variables
+    # @section -- Django Settings
+    variables:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      DEBUG: "True"
+  # -- Enables migration job before rolling the update
+  # @section -- Django Settings
+  migrationJob:
+    enabled: false
+  # -- Enables cron jobs
+  # @section -- Django Settings
+  # @default -- [ ]
+  cronJobs: [ ]
+  #    - name: my_awesome_django_cron
+  #      enabled: true
+  #      cronSchedule: "*/5 * * * *"
+  #      containerCommand:
+  #        - "python"
+  #        - "manage.py"
+  #        - "my_awesome_django_cron"
+  #      extraVolumes: [ ]
+  #      # - name: cron-volume-1
+  #      #   secret:
+  #      #     secretName: cron-volume-1-conf
+  #      extraVolumeMounts: [ ]
+  #      #  - name: cron-volume-1
+  #      #    mountPath: /opt/cron/conf
+  #      #    readOnly: true
+  #      securityContext: { }
+  #      # capabilities:
+  #      #   drop:
+  #      #   - ALL
+  #      # readOnlyRootFilesystem: true
+  #      # runAsNonRoot: true
+  #      # runAsUser: 1000
+  #      resources: { }
+  #      nodeSelector: [ ]
+  #      tolerations: [ ]
+  #      affinity: { }
+  # -- Enables Django Workers
+  # @section -- Django Settings
+  # @default -- [ ]
+  workers: []
+  #    - name: celery
+  #      enabled: true
+  #      containerCommand:
+  #        - "celery"
+  #        - "-A"
+  #        - "proj"
+  #        - "worker"
+  #        - "--loglevel=INFO"
+  #      extraVolumes: [ ]
+  #      # - name: worker-volume-1
+  #      #   secret:
+  #      #     secretName: worker-volume-1-conf
+  #      extraVolumeMounts: [ ]
+  #      #  - name: worker-volume-1
+  #      #    mountPath: /opt/worker/conf
+  #      #    readOnly: true
+  #      resources: { }
+  #      # We usually recommend not to specify default resources and to leave this as a conscious
+  #      # choice for the user. This also increases chances charts run on environments with little
+  #      # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  #      # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  #      # limits:
+  #      #   cpu: 100m
+  #      #   memory: 128Mi
+  #      # requests:
+  #      #   cpu: 100m
+  #      #   memory: 128Mi
+  #      replicaCount: 1
+  #      autoscaling:
+  #        enabled: false
+  #        minReplicas: 1
+  #        maxReplicas: 100
+  #        targetCPUUtilizationPercentage: 80
+  #        # targetMemoryUtilizationPercentage: 80
+  #      livenessProbe:
+  #        httpGet:
+  #          path: /
+  #          port: http
+  #      readinessProbe:
+  #        httpGet:
+  #          path: /
+  #          port: http
+  #      nodeSelector: [ ]
+  #      # app.kubernetes.io/env: "production"
+  #      # app.kubernetes.io/worker: "true"
+  #      tolerations: [ ]
+  #      affinity: { }
+
+
+# -- Service settings
+# @section -- Networking Settings
+service:
+  type: ClusterIP
+  port: 80
+# -- Ingress settings
+# @section -- Networking Settings
+ingress:
+  # -- Enables ingress when true
+  enabled: false
+  className: ""
+  annotations: { }
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: [ ]
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+# -- Autoscaling settings
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# -- Node selector settings
+nodeSelector: { }
+# -- Tolerations settings
+tolerations: [ ]
+# -- Affinity settings
+affinity: { }
