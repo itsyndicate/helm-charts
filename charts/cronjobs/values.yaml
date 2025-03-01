@@ -1,0 +1,67 @@
+# -- Override release name
+nameOverride: ""
+# -- Override full release name
+fullnameOverride: ""
+# -- Image pull secrets
+imagePullSecrets: [ ]
+# -- Service account configuration
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # -- Annotations to add to the service account
+  annotations: { }
+  # -- The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+# -- Cron Job List
+cronJobs:
+  - name: my_awesome_django_cron
+    enabled: true
+    failedJobsHistoryLimit: 1
+    successfulJobsHistoryLimit: 3
+    concurrencyPolicy: Forbid
+    restartPolicy: OnFailure
+    image:
+      repository: ubuntu
+      tag: latest
+      imagePullPolicy: Always
+    cronSchedule: "*/1 * * * *"
+    containerCommand:
+      - "bash"
+      - "-c"
+      - "echo $(date)"
+    extraVolumes: [ ]
+    # - name: cron-volume-1
+    #   secret:
+    #     secretName: cron-volume-1-conf
+    extraVolumeMounts: [ ]
+    #  - name: cron-volume-1
+    #    mountPath: /opt/cron/conf
+    #    readOnly: true
+    securityContext: { }
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+    resources: { }
+    nodeSelector: [ ]
+    tolerations: [ ]
+    affinity: { }
+
+
+# -- Cron environment variables
+# @section -- Cron Settings
+env:
+  # -- Use AWS secrets manager ref. Works with external-secrets operator
+  # @section -- Cron Settings
+  envFromSecretsManager:
+    enabled: true
+    secretPath: dev/skidochki/env-secrets
+  # -- Extra env variables
+  # @section -- Cron Settings
+  variables:
+    DEBUG: "True"
