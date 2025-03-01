@@ -21,4 +21,15 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/cronjobs-0.1.0/cronjobs-0.1.0.tgz
     version: 0.1.0
-generated: "2025-03-01T02:06:48.732714122Z"
+  django:
+  - apiVersion: v2
+    appVersion: 1.27.4
+    created: "2025-03-01T02:08:53.550432673Z"
+    description: A Helm chart for Kubernetes
+    digest: d91b18d07685f55b28a51707902dc287f5c851aeca8bddf1a16c1bb6e243ac69
+    name: django
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/django-0.0.1/django-0.0.1.tgz
+    version: 0.0.1
+generated: "2025-03-01T02:08:53.550441901Z"
