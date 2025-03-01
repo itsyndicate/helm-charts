@@ -1,0 +1,68 @@
+{{- range $cron := $.Values.cronJobs }}
+{{- if $cron.enabled -}}
+---
+{{- $cronName := $cron.name | replace "_" "-" -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cronjobs.fullname" $ }}-{{ $cronName }}
+spec:
+  schedule: {{ $cron.cronSchedule | quote }}
+  concurrencyPolicy: {{ $cron.concurrencyPolicy | default "Forbid" }}
+  successfulJobsHistoryLimit: {{ $cron.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ $cron.failedJobsHistoryLimit | default 1 }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          serviceAccountName: {{ include "cronjobs.serviceAccountName" $ }}
+          securityContext:
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: {{ $.Chart.Name }}-{{ $cronName }}
+              securityContext:
+                {{- toYaml $cron.securityContext | nindent 16 }}
+              image: "{{ $cron.image.repository }}:{{ $cron.image.tag | default "latest" }}"
+              imagePullPolicy: {{ $cron.image.pullPolicy }}
+              {{- if $cron.containerCommand }}
+              command: {{- range $cron.containerCommand }}
+                - {{ . | quote }} {{- end}}
+              {{- end }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "cronjobs.fullname" $ }}-env-secrets
+                {{- if $.Values.env.envFromSecretsManager.enabled }}
+                - secretRef:
+                    name: {{ include "cronjobs.fullname" $ }}-env-ext-secrets
+                {{- end }}
+              volumeMounts:
+                {{- with $cron.extraVolumeMounts }}
+                {{- toYaml . | nindent 12 }}
+                {{- end }}
+              {{- with $cron.resources }}
+              resources:
+                {{- toYaml . | nindent 14 }}
+              {{- end }}
+          {{- with $cron.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with $cron.affinity }}
+          affinity:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          {{- with $cron.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+          volumes:
+            {{- with $cron.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          restartPolicy: {{ $cron.restartPolicy | default "Never" }}
+{{- end }}
+{{ end }}
