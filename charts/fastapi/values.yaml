@@ -1,101 +1,199 @@
-# Default values for fastapi.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# -- Number of replicas to spin up
 replicaCount: 1
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
-image:
-  repository: nginx
-  # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
-
-# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+# -- Secret used to store Docker registry credentials
 imagePullSecrets: []
-# This is to override the chart name.
+
+# -- Overrides release name
 nameOverride: ""
+
+# -- Overrides full release name
 fullnameOverride: ""
 
-# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+# -- Service Account configuration
 serviceAccount:
-  # Specifies whether a service account should be created
+  # -- Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
+  # -- Automatically mount a ServiceAccount's API credentials?
   automount: true
-  # Annotations to add to the service account
+  # -- Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
+  # -- The name of the service account to use
   name: ""
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+# -- Annotations to add to the pods
 podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+
+# -- Labels to add to the pods
 podLabels: {}
 
+# -- Security context for the pod
 podSecurityContext: {}
-  # fsGroup: 2000
+# fsGroup: 2000
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
-service:
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
-  type: ClusterIP
-  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-  port: 80
-
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
+  # -- Enables ingress when true
   enabled: false
   className: ""
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
+  annotations: { }
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
   hosts:
     - host: chart-example.local
       paths:
         - path: /
           pathType: ImplementationSpecific
-  tls: []
+  tls: [ ]
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
+  
+# -- FastAPI-specific configurations
+fastapi:
+  image:
+    # -- FastAPI Docker image repository
+    repository: my-fastapi-image
+    # -- Tag of the FastAPI image
+    tag: latest
+    # -- Image pull policy (Always, IfNotPresent, Never)
+    pullPolicy: IfNotPresent
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  # -- Security context for the FastAPI container
+  securityContext: {}
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe:
-  httpGet:
-    path: /
-    port: http
-readinessProbe:
-  httpGet:
-    path: /
-    port: http
+  # -- Resource limits and requests for the FastAPI container
+  resources: {}
 
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+  # -- Environment variables configuration
+  env:
+    # -- Key-value pairs of environment variables (will be base64 encoded in the secret)
+    variables: {}
+    envFromSecretsManager:
+      # -- Enable fetching secrets from an external secrets manager (e.g., AWS)
+      enabled: false
+      # -- Path to the secret in the external secrets manager
+      secretPath: "path/to/secret"
+
+  # -- Liveness probe configuration for FastAPI
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  # -- Readiness probe configuration for FastAPI
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  # -- Additional volume mounts for FastAPI container
+  volumeMounts: []
+
+  # -- Additional volumes for FastAPI pods
+  volumes: []
+
+  # -- Configuration for FastAPI workers
+  workers: []
+  #    - name: celery
+  #      enabled: true
+  #      containerCommand:
+  #        - "celery"
+  #        - "-A"
+  #        - "proj"
+  #        - "worker"
+  #        - "--loglevel=INFO"
+  #      extraVolumes: [ ]
+  #      # - name: worker-volume-1
+  #      #   secret:
+  #      #     secretName: worker-volume-1-conf
+  #      extraVolumeMounts: [ ]
+  #      #  - name: worker-volume-1
+  #      #    mountPath: /opt/worker/conf
+  #      #    readOnly: true
+  #      resources: { }
+  #      # We usually recommend not to specify default resources and to leave this as a conscious
+  #      # choice for the user. This also increases chances charts run on environments with little
+  #      # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  #      # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  #      # limits:
+  #      #   cpu: 100m
+  #      #   memory: 128Mi
+  #      # requests:
+  #      #   cpu: 100m
+  #      #   memory: 128Mi
+  #      replicaCount: 1
+  #      autoscaling:
+  #        enabled: false
+  #        minReplicas: 1
+  #        maxReplicas: 100
+  #        targetCPUUtilizationPercentage: 80
+  #        # targetMemoryUtilizationPercentage: 80
+  #      livenessProbe:
+  #        httpGet:
+  #          path: /
+  #          port: http
+  #      readinessProbe:
+  #        httpGet:
+  #          path: /
+  #          port: http
+  #      nodeSelector: [ ]
+  #      # app.kubernetes.io/env: "production"
+  #      # app.kubernetes.io/worker: "true"
+  #      tolerations: [ ]
+  #      affinity: { }
+
+# -- NginX-specific configurations
+nginx:
+  image:
+    # -- NginX Docker image repository
+    repository: nginx
+    # -- Tag of the NginX image
+    tag: alpine
+    # -- Image pull policy (Always, IfNotPresent, Never)
+    pullPolicy: IfNotPresent
+
+  # -- Security context for the NginX container
+  securityContext: {}
+
+  # -- Resource limits and requests for NginX container
+  resources: {}
+
+  # -- Liveness probe configuration for NginX
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  # -- Readiness probe configuration for NginX
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  # -- Additional volume mounts for the NginX container
+  volumeMounts: []
+
+  # -- Additional volumes for the NginX pods
+  volumes: []
+
+# -- Node selector for pod placement
+nodeSelector: {}
+
+# -- Affinity rules for pod placement
+affinity: {}
+
+# -- Tolerations for pod placement
+tolerations: []
+
+# -- Autoscaling configuration
 autoscaling:
   enabled: false
   minReplicas: 1
@@ -103,21 +201,9 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
+# -- Service configuration
+service:
+  # -- Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
+  type: ClusterIP
+  # -- Port exposed by the service
+  port: 80

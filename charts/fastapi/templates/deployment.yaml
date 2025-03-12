@@ -4,6 +4,8 @@ metadata:
   name: {{ include "fastapi.fullname" . }}
   labels:
     {{- include "fastapi.labels" . | nindent 4 }}
+  annotations:
+    secret.reloader.stakater.com/reload: "{{ include "fastapi.fullname" . }}-env-secrets, {{ include "fastapi.fullname" . }}-env-ext-secrets"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -28,40 +30,75 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "fastapi.serviceAccountName" . }}
-      {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
-          {{- with .Values.securityContext }}
+        - name: {{ .Chart.Name }}-nginx
           securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+            {{- toYaml .Values.nginx.securityContext | nindent 12 }}
+          image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag | default "alpine" }}"
+          imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.readinessProbe }}
+            {{- toYaml .Values.nginx.livenessProbe | nindent 12 }}
           readinessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.resources }}
+            {{- toYaml .Values.nginx.readinessProbe | nindent 12 }}
           resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.volumeMounts }}
+            {{- toYaml .Values.nginx.resources | nindent 12 }}
           volumeMounts:
+            - name: socket
+              mountPath: /tmp
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+          {{- with .Values.nginx.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- with .Values.volumes }}
+
+        - name: {{ .Chart.Name }}-fastapi-app
+          securityContext:
+            {{- toYaml .Values.fastapi.securityContext | nindent 12 }}
+          image: "{{ .Values.fastapi.image.repository }}:{{ .Values.fastapi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.fastapi.image.pullPolicy }}
+          command: [ "uvicorn" ]
+          args: [ "--uds", "/tmp/uvicorn.sock", "--workers", "3", "main:app" ]
+          envFrom:
+            - secretRef:
+                name: {{ include "fastapi.fullname" . }}-env-secrets
+            {{- if .Values.fastapi.env.envFromSecretsManager.enabled }}
+            - secretRef:
+                name: {{ include "fastapi.fullname" . }}-env-ext-secrets
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.fastapi.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.fastapi.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.fastapi.resources | nindent 12 }}
+          volumeMounts:
+            - name: socket
+              mountPath: /tmp
+          {{- with .Values.fastapi.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
       volumes:
+        - name: socket
+          emptyDir: { }
+        - name: nginx-conf
+          configMap:
+            name: {{ include "fastapi.fullname" $ }}-nginx-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+      {{- with .Values.nginx.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fastapi.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
