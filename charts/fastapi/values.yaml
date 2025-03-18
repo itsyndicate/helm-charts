@@ -30,7 +30,8 @@ podLabels: {}
 # -- Security context for the pod
 podSecurityContext: {}
 # fsGroup: 2000
-
+# -- Ingress settings
+# @section -- Networking Settings
 ingress:
   # -- Enables ingress when true
   enabled: false
@@ -49,25 +50,33 @@ ingress:
   #      - chart-example.local
   
 # -- FastAPI-specific configurations
+# @section -- FastAPI Settings
+# @default -- A complex object. Please check values below
 fastapi:
+  # -- FastAPI image settings
+  # @section -- FastAPI Settings
   image:
     # -- FastAPI Docker image repository
     repository: my-fastapi-image
     # -- Tag of the FastAPI image
+    # @section -- FastAPI Settings
     tag: latest
     # -- Image pull policy (Always, IfNotPresent, Never)
     pullPolicy: IfNotPresent
 
   # -- Security context for the FastAPI container
+  # @section -- FastAPI Settings
   securityContext: {}
 
   # -- Resource limits and requests for the FastAPI container
+  # @section -- FastAPI Settings
   resources: {}
-
-  # -- Environment variables configuration
   env:
     # -- Key-value pairs of environment variables (will be base64 encoded in the secret)
+    # @section -- FastAPI Settings
     variables: {}
+    # -- Use AWS secrets manager ref. Works with external-secrets operator
+    # @section -- FastAPI Settings
     envFromSecretsManager:
       # -- Enable fetching secrets from an external secrets manager (e.g., AWS)
       enabled: false
@@ -75,6 +84,7 @@ fastapi:
       secretPath: "path/to/secret"
 
   # -- Liveness probe configuration for FastAPI
+  # @section -- FastAPI Settings
   livenessProbe:
     httpGet:
       path: /health
@@ -83,6 +93,7 @@ fastapi:
     periodSeconds: 10
 
   # -- Readiness probe configuration for FastAPI
+  # @section -- FastAPI Settings
   readinessProbe:
     httpGet:
       path: /health
@@ -91,12 +102,15 @@ fastapi:
     periodSeconds: 10
 
   # -- Additional volume mounts for FastAPI container
+  # @section -- FastAPI Settings
   volumeMounts: []
 
   # -- Additional volumes for FastAPI pods
+  # @section -- FastAPI Settings
   volumes: []
 
   # -- Configuration for FastAPI workers
+  # @section -- FastAPI Settings
   workers: []
   #    - name: celery
   #      enabled: true
@@ -146,8 +160,11 @@ fastapi:
   #      tolerations: [ ]
   #      affinity: { }
 
-# -- NginX-specific configurations
+# -- NginX Specific Configurations
+# @section -- NginX Settings
+# @default -- A complex object. Please check values below
 nginx:
+  # @section -- NginX Settings
   image:
     # -- NginX Docker image repository
     repository: nginx
@@ -157,31 +174,37 @@ nginx:
     pullPolicy: IfNotPresent
 
   # -- Security context for the NginX container
+  # @section -- NginX Settings
   securityContext: {}
 
   # -- Resource limits and requests for NginX container
+  # @section -- NginX Settings
   resources: {}
 
   # -- Liveness probe configuration for NginX
-  livenessProbe:
-    httpGet:
-      path: /
-      port: 80
-    initialDelaySeconds: 10
-    periodSeconds: 10
+  # @section -- NginX Settings
+  # livenessProbe:
+  #   httpGet:
+  #     path: /
+  #     port: 80
+  #   initialDelaySeconds: 10
+  #   periodSeconds: 10
 
   # -- Readiness probe configuration for NginX
-  readinessProbe:
-    httpGet:
-      path: /
-      port: 80
-    initialDelaySeconds: 10
-    periodSeconds: 10
+  # @section -- NginX Settings
+  # readinessProbe:
+  #   httpGet:
+  #     path: /
+  #     port: 80
+  #   initialDelaySeconds: 10
+  #   periodSeconds: 10
 
   # -- Additional volume mounts for the NginX container
+  # @section -- NginX Settings
   volumeMounts: []
 
   # -- Additional volumes for the NginX pods
+  # @section -- NginX Settings
   volumes: []
 
 # -- Node selector for pod placement
@@ -202,6 +225,7 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # -- Service configuration
+# @section -- Networking Settings
 service:
   # -- Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer)
   type: ClusterIP
