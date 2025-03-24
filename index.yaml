@@ -32,6 +32,17 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/django-0.0.1/django-0.0.1.tgz
     version: 0.0.1
+  fastapi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2025-03-24T12:11:35.018413582Z"
+    description: A Helm chart for Kubernetes
+    digest: 32672a98a06058b8792d0edabc98e5d171697cd156ecf453e746adfc13f010aa
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.1.0/fastapi-0.1.0.tgz
+    version: 0.1.0
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -43,4 +54,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2025-03-01T02:10:09.393357761Z"
+generated: "2025-03-24T12:11:35.018422688Z"
