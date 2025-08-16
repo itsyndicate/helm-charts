@@ -1,30 +1,30 @@
 # dotnet
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.0.1](https://img.shields.io/badge/AppVersion-0.0.1-informational?style=flat-square)
+![Version: 0.0.1](https://img.shields.io/badge/Version-0.0.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.0.1](https://img.shields.io/badge/AppVersion-0.0.1-informational?style=flat-square)
 
 ## Values
 
-### Dotnet Settings
+### Dotnet APP Settings
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| dotnet | object | A complex object. Please check values below | Dotnet Specific Configurations |
+| dotnet | object | A complex object. Please check values below | Dotnet APP Specific Configurations |
 | dotnet.env.envFromSecretsManager | object | `{"enabled":false,"secretPath":"dev/example-com/env-secrets"}` | Use AWS secrets manager ref. Works with external-secrets operator |
 | dotnet.env.variables | object | `{"APP_DOMAIN":"example.com"}` | Extra env variables |
-| dotnet.image | object | `{"pullPolicy":"IfNotPresent","repository":"mcr.microsoft.com/dotnet/samples","tag":""}` | Dotnet image settings |
+| dotnet.image | object | `{"pullPolicy":"IfNotPresent","repository":"mcr.microsoft.com/dotnet/samples","tag":""}` | Dotnet APP image settings |
 | dotnet.image.tag | string | `""` | Overrides the image tag whose default is the chart appVersion |
-| dotnet.port | int | `3000` | Dotnet environment variables |
-| dotnet.resources | object | `{}` | Dotnet container resources |
-| dotnet.securityContext | object | `{}` | Dotnet container security context |
-| dotnet.volumeMounts | list | `[]` | Dotnet container additional volumes mounts |
-| dotnet.volumes | list | `[]` | Dotnet container additional volumes |
+| dotnet.port | int | `5001` | Dotnet APP environment variables |
+| dotnet.resources | object | `{}` | Dotnet APP container resources |
+| dotnet.securityContext | object | `{}` | Dotnet APP container security context |
+| dotnet.volumeMounts | list | `[]` | Dotnet APP container additional volumes mounts |
+| dotnet.volumes | list | `[]` | Dotnet APP container additional volumes |
 
 ### Networking Settings
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings |
-| service | object | `{"port":80,"type":"ClusterIP"}` | Service settings |
+| service | object | `{"port":5001,"type":"ClusterIP"}` | Service settings |
 
 ### NginX Settings
 
