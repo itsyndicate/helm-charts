@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pgsync.fullname" . }}
+  labels:
+    {{- include "pgsync.labels" . | nindent 4 }}
+  annotations:
+    secret.reloader.stakater.com/reload: "{{ include "pgsync.fullname" . }}-env-secrets, {{ include "pgsync.fullname" . }}-env-ext-secrets"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pgsync.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "pgsync.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "pgsync.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.pgsync.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.pgsync.image.repository }}:{{ .Values.pgsync.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.pgsync.image.pullPolicy }}
+          {{- with .Values.pgsync.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "pgsync.fullname" . }}-env-secrets
+            {{- if .Values.pgsync.env.envFromSecretsManager.enabled }}
+            - secretRef:
+                name: {{ include "pgsync.fullname" . }}-env-ext-secrets
+            {{- end }}
+          livenessProbe:
+      {{- with .Values.pgsync.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
