@@ -167,6 +167,9 @@ dotnet:
 service:
   type: ClusterIP
   port: 5001
+  ## @param service.extraPorts Extra ports to expose
+  ##
+  extraPorts: []
 # -- Ingress settings
 # @section -- Networking Settings
 ingress:

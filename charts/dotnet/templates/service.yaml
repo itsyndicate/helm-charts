@@ -11,5 +11,13 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+  {{- if .Values.service.extraPorts }}
+  {{- range .Values.service.extraPorts }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort | default "http" }}
+      protocol: {{ .protocol | default "TCP" }}
+      name: {{ .name | default (printf "port-%d" .port) }}
+  {{- end }}
+  {{- end }}
   selector:
     {{- include "dotnet.selectorLabels" . | nindent 4 }}
