@@ -24,67 +24,6 @@ podLabels: { }
 podSecurityContext: { }
 # fsGroup: 2000
 
-# -- NginX Specific Configurations
-# @section -- NginX Settings
-# @default -- A complex object. Please check values below
-nginx:
-  # -- NginX image settings
-  # @section -- NginX Settings
-  image:
-    repository: nginx
-    pullPolicy: IfNotPresent
-    # -- Overrides the image tag whose default is the chart appVersion
-    # @section -- NginX Settings
-    tag: ""
-  # -- NginX container security context
-  # @section -- NginX Settings
-  securityContext: { }
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-  # -- NginX container resources
-  # @section -- NginX Settings
-  resources: { }
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # -- NginX container liveness probe
-  # @section -- NginX Settings
-  #  livenessProbe:
-  #    httpGet:
-  #      path: /
-  #      port: http
-  # -- NginX container readiness probe
-  # @section -- NginX Settings
-  #  readinessProbe:
-  #    httpGet:
-  #      path: /
-  #      port: http
-  # -- NginX container additional volumes
-  # @section -- NginX Settings
-  volumes: [ ]
-  # - name: foo
-  #   secret:
-  #     secretName: mysecret
-  #     optional: false
-
-  # -- NginX container additional volumes mounts
-  # @section -- NginX Settings
-  volumeMounts: [ ]
-  # - name: foo
-  #   mountPath: "/etc/foo"
-  #   readOnly: true
-
 # -- Dotnet APP Specific Configurations
 # @section -- Dotnet APP Settings
 # @default -- A complex object. Please check values below
@@ -149,7 +88,10 @@ dotnet:
   #   readOnly: true
   # -- Dotnet APP environment variables
   # @section -- Dotnet APP Settings
-  port: 5001
+  port:
+    number: 5001
+    name: http
+    protocol: TCP
   env:
     # -- Use AWS secrets manager ref. Works with external-secrets operator
     # @section -- Dotnet APP Settings
@@ -164,11 +106,19 @@ dotnet:
 
 # -- Service settings
 # @section -- Networking Settings
+#service:
+#  type: ClusterIP
+#  port: 5001
+#  ## @param service.extraPorts Extra ports to expose
+#  ##
+#  extraPorts: []
 service:
-  type: ClusterIP
+  name: http
   port: 5001
-  ## @param service.extraPorts Extra ports to expose
-  ##
+  targetPort: http
+  protocol: TCP
+  appProtocol: http
+  type: ClusterIP
   extraPorts: []
 # -- Ingress settings
 # @section -- Networking Settings
