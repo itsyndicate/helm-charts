@@ -33,29 +33,6 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}-nginx
-          securityContext:
-            {{- toYaml .Values.nginx.securityContext | nindent 12 }}
-          image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag | default "alpine" }}"
-          imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
-              protocol: TCP
-          livenessProbe:
-            {{- toYaml .Values.nginx.livenessProbe | nindent 12 }}
-          readinessProbe:
-            {{- toYaml .Values.nginx.readinessProbe | nindent 12 }}
-          resources:
-            {{- toYaml .Values.nginx.resources | nindent 12 }}
-          volumeMounts:
-            - name: nginx-conf
-              mountPath: /etc/nginx/nginx.conf
-              subPath: nginx.conf
-              readOnly: true
-            {{- with .Values.nginx.volumeMounts }}
-              {{- toYaml . | nindent 12 }}
-            {{- end }}
         - name: {{ .Chart.Name }}-app
           securityContext:
             {{- toYaml .Values.dotnet.securityContext | nindent 12 }}
@@ -69,9 +46,16 @@ spec:
                 name: {{ include "dotnet.fullname" . }}-env-ext-secrets
             {{- end }}
           ports:
-            - name: http
-              containerPort: {{ .Values.dotnet.port | default "3000" }}
-              protocol: TCP
+            - name: {{ .Values.dotnet.port.name | default "http" }}
+              containerPort: {{ .Values.dotnet.port.number | default "5001" }}
+              protocol: {{ .Values.dotnet.port.protocol}}
+          {{- if .Values.service.extraPorts }}
+          {{- range .Values.service.extraPorts }}
+            - name: {{ .name | default (printf "port-%d" .port) }}
+              containerPort: {{ .port }}
+              protocol: {{ .protocol | default "TCP" }}
+          {{- end }}
+          {{- end }}
           livenessProbe:
             {{- toYaml .Values.dotnet.livenessProbe | nindent 12 }}
           readinessProbe:
@@ -83,15 +67,6 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
-        - name: nginx-conf
-          configMap:
-            name: {{ include "dotnet.fullname" $ }}-nginx-conf
-            items:
-              - key: nginx.conf
-                path: nginx.conf
-      {{- with .Values.nginx.volumes }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       {{- with .Values.dotnet.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -224,6 +224,13 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
+# -- Pod Disruption Budget settings
+# @section -- PDB Settings
+pdb:
+  create: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
 # -- Service configuration
 # @section -- Networking Settings
 service:
