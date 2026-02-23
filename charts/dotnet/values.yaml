@@ -150,7 +150,7 @@ autoscaling:
 # @section -- PDB Settings
 pdb:
   create: false
-  minAvailable: 1
+  # minAvailable: 1
   # maxUnavailable: 1
 
 # -- Node selector settings
