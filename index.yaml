@@ -46,6 +46,16 @@ entries:
   fastapi:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-03-20T09:08:38.398533137Z"
+    description: A Helm chart for Kubernetes
+    digest: 44e23945f3ff1eef01371ba45b815c00d98cc524d1a20a8ca96404142fdb170d
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.2.0/fastapi-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-03-24T12:11:35.018413582Z"
     description: A Helm chart for Kubernetes
     digest: 32672a98a06058b8792d0edabc98e5d171697cd156ecf453e746adfc13f010aa
@@ -65,4 +75,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2025-08-16T17:00:42.169873042Z"
+generated: "2026-03-20T09:08:38.581055548Z"
