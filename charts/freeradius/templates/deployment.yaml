@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "freeradius.fullname" . }}
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "freeradius.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "freeradius.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "freeradius.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: config-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              cp -a /etc/freeradius/. /mnt/config/
+              {{- if .Values.extraBaseConfigsConfigMapName }}
+              for f in /extra-base-config/*; do
+                key=$(basename "$f")
+                path=$(printf '%s' "$key" | sed 's/--/\//g')
+                mkdir -p "$(dirname "/mnt/config/$path")"
+                cp "$f" "/mnt/config/$path"
+              done
+              {{- end }}
+              {{- if .Values.extraConfigsConfigMapName }}
+              for f in /extra-config/*; do
+                key=$(basename "$f")
+                path=$(printf '%s' "$key" | sed 's/--/\//g')
+                mkdir -p "$(dirname "/mnt/config/$path")"
+                cp "$f" "/mnt/config/$path"
+              done
+              {{- end }}
+          volumeMounts:
+            - name: config-dir
+              mountPath: /mnt/config
+            {{- if .Values.extraBaseConfigsConfigMapName }}
+            - name: extra-base-config
+              mountPath: /extra-base-config
+            {{- end }}
+            {{- if .Values.extraConfigsConfigMapName }}
+            - name: extra-config
+              mountPath: /extra-config
+            {{- end }}
+      containers:
+        - name: freeradius
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: radius-auth
+              containerPort: {{ .Values.service.authPort }}
+              protocol: UDP
+            - name: radius-acct
+              containerPort: {{ .Values.service.acctPort }}
+              protocol: UDP
+          {{- if not .Values.externalSecret.dataFrom.enabled }}
+          env:
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.credentialsSecretName" . }}
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "freeradius.credentialsSecretName" . }}
+                  key: DB_PASSWORD
+          {{- end }}
+          {{- if .Values.externalSecret.dataFrom.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ include "freeradius.credentialsSecretName" . }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config-dir
+              mountPath: /etc/freeradius
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config-dir
+          emptyDir: {}
+        {{- if .Values.extraBaseConfigsConfigMapName }}
+        - name: extra-base-config
+          configMap:
+            name: {{ .Values.extraBaseConfigsConfigMapName }}
+        {{- end }}
+        {{- if .Values.extraConfigsConfigMapName }}
+        - name: extra-config
+          configMap:
+            name: {{ .Values.extraConfigsConfigMapName }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

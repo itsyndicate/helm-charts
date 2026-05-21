@@ -1,0 +1,214 @@
+# -- Number of FreeRADIUS pod replicas
+replicaCount: 1
+
+# -- Override chart name
+nameOverride: ""
+# -- Override fully qualified app name
+fullnameOverride: ""
+
+image:
+  # -- Container image repository
+  repository: freeradius/freeradius-server
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to .Chart.AppVersion)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+serviceAccount:
+  # -- Create a dedicated ServiceAccount
+  create: true
+  # -- Annotations for the ServiceAccount (e.g. IRSA role ARN)
+  annotations: {}
+  # -- ServiceAccount name override (generated from fullname if empty)
+  name: ""
+
+# -- Pod annotations
+podAnnotations:
+  reloader.stakater.com/auto: "true"
+# -- Additional pod labels
+podLabels: {}
+
+# -- Pod-level security context. FreeRADIUS starts as root then drops to freerad (UID 101).
+podSecurityContext:
+  fsGroup: 101
+
+# -- Container-level security context
+securityContext:
+  runAsUser: 0
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - SETUID
+      - SETGID
+
+service:
+  # -- Service type. LoadBalancer with AWS NLB is required for UDP traffic.
+  type: LoadBalancer
+  # -- Preserve client source IP through NLB; required for per-AP RADIUS client matching
+  externalTrafficPolicy: Local
+  # -- Service annotations. Defaults configure an internet-facing AWS NLB with IP target mode.
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  # -- RADIUS authentication port (UDP 1812)
+  authPort: 1812
+  # -- RADIUS accounting port (UDP 1813)
+  acctPort: 1813
+
+# -- Container resource requests and limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# -- Liveness probe. Uses PID file because FreeRADIUS exposes no HTTP endpoint.
+livenessProbe:
+  exec:
+    command:
+      - pgrep
+      - -x
+      - freeradius
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  failureThreshold: 3
+
+# -- Readiness probe
+readinessProbe:
+  exec:
+    command:
+      - pgrep
+      - -x
+      - freeradius
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# -- Pod Disruption Budget settings
+# @section -- PDB Settings
+pdb:
+  # -- Enable PodDisruptionBudget (meaningful only with replicaCount > 1)
+  create: false
+  # -- Minimum available pods during voluntary disruptions
+  minAvailable: 1
+
+networkPolicy:
+  # -- Enable NetworkPolicy restricting ingress to RADIUS ports only
+  enabled: false
+  # -- Extra ingress rules appended to the generated policy
+  additionalIngress: []
+
+# -- Node selector constraints
+nodeSelector: {}
+# -- Tolerations for pod scheduling
+tolerations: []
+# -- Affinity rules for pod scheduling
+affinity: {}
+
+
+# External Secrets Operator — fetches credentials from AWS Secrets Manager
+externalSecret:
+  # -- Create an ExternalSecret resource. Disable only if managing the credentials Secret manually.
+  enabled: true
+  # -- ClusterSecretStore name that already exists in the cluster
+  secretStoreName: global-secret-store
+  # -- How often ESO syncs the secret from Secrets Manager
+  refreshInterval: 1h
+  # -- Name of the resulting Kubernetes Secret (defaults to <fullname>-credentials)
+  secretName: ""
+
+  # -- Pull ALL fields from a single JSON secret automatically (dataFrom mode).
+  #    When enabled, every field in the remote secret becomes a key in the K8s Secret,
+  #    and all keys are injected into the pod via envFrom (no per-key mapping needed).
+  #    Use this when one AWS secret holds all credentials for FreeRADIUS.
+  dataFrom:
+    enabled: false
+    # -- AWS Secrets Manager secret path to extract all fields from
+    key: ""  # e.g. "project/env/freeradius"
+
+  # -- Per-key remote references. Used only when dataFrom.enabled is false.
+  #    Set `key` to the Secrets Manager secret path; set `property` for JSON-format secrets.
+  remoteRefs:
+    DB_PASSWORD:
+      key: ""       # e.g. "project/env/freeradius/db-password"
+      property: ""  # e.g. "password" — leave empty for plain-string secrets
+    DB_USERNAME:
+      key: ""
+      property: ""
+    RADIUS_DEFAULT_SECRET:
+      key: ""
+      property: ""
+
+# In-cluster MariaDB subchart (Bitnami). Enable for dev/staging; disable for prod (AWS RDS).
+mariadb:
+  # -- Deploy MariaDB inside the cluster. Set false when pointing to an external database.
+  enabled: false
+  auth:
+    # -- Database name created on first boot
+    database: radius
+    # -- Application username
+    username: radius
+    # -- Application user password. Use externalSecret in production; set here only for dev.
+    password: ""
+    rootPassword: ""
+  primary:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# -- Name of an existing ConfigMap with universal (base) FreeRADIUS configs.
+#    Applied by the initContainer before extraConfigsConfigMapName, so env configs take precedence.
+extraBaseConfigsConfigMapName: ""
+
+# -- Name of an existing ConfigMap whose keys (using -- as path separator) are
+#    copied into /etc/freeradius by the initContainer.
+#    Example: "freeradius-extra-configs" created via Kustomize configMapGenerator.
+extraConfigsConfigMapName: ""
+
+extraVolumes: []
+extraVolumeMounts: []
+extraContainers: []
+
+# -- Container args (replaces image CMD). Defaults to foreground mode with stdout logging.
+args:
+  - freeradius
+  - -f
+  - -l
+  - stdout
+
+# -- Migration job run as a pre-upgrade Helm hook.
+# Runs before new pods are rolled out on every helm upgrade.
+# SQL must be idempotent (IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, etc.).
+#
+# Example:
+#   migrationJob:
+#     enabled: true
+#     image: mysql:8.0
+#     command:
+#       - /bin/sh
+#       - -c
+#       - |
+#         mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_NAME" <<'SQL'
+#         CREATE TABLE IF NOT EXISTS radcheck (...);
+#         ALTER TABLE radacct ADD COLUMN IF NOT EXISTS session_type VARCHAR(32);
+#         SQL
+migrationJob:
+  enabled: false
+  image: ""           # defaults to freeradius image; use mysql:8.0 for SQL migrations
+  imagePullPolicy: ""
+  command: []
+  backoffLimit: 3
+  resources: {}

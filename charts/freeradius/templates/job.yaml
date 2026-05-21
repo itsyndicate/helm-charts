@@ -1,0 +1,45 @@
+{{- if .Values.migrationJob.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "freeradius.fullname" . }}-migration
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration-job
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ default 3 .Values.migrationJob.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "freeradius.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration-job
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "freeradius.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migration
+          {{- if .Values.migrationJob.image }}
+          image: {{ .Values.migrationJob.image }}
+          {{- else }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          {{- end }}
+          imagePullPolicy: {{ default .Values.image.pullPolicy .Values.migrationJob.imagePullPolicy }}
+          command:
+            {{- toYaml .Values.migrationJob.command | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ include "freeradius.credentialsSecretName" . }}
+          {{- with .Values.migrationJob.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
