@@ -151,6 +151,9 @@ nextjs:
   # @section -- Next.js Settings
   preDeployJob:
     enabled: false
+    # -- Number of retries before marking the job as failed
+    # @section -- Next.js Settings
+    backoffLimit: 6
     # -- Command to run in the job container
     # @section -- Next.js Settings
     command: []
