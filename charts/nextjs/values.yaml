@@ -147,6 +147,18 @@ nextjs:
   # - name: foo
   #   mountPath: "/etc/foo"
   #   readOnly: true
+  # -- Enables pre-deploy job with Helm hook before rolling the update
+  # @section -- Next.js Settings
+  preDeployJob:
+    enabled: false
+    # -- Command to run in the job container
+    # @section -- Next.js Settings
+    command: []
+    #  - node
+    # -- Arguments to pass to the command
+    # @section -- Next.js Settings
+    args: []
+    #  - scripts/migrate.js
   # -- Next.js environment variables
   # @section -- Next.js Settings
   port: 3000
