@@ -84,6 +84,22 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.1.0/fastapi-0.1.0.tgz
     version: 0.1.0
+  freeradius:
+  - apiVersion: v2
+    appVersion: 3.2.8
+    created: "2026-05-22T09:59:56.386121674Z"
+    dependencies:
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20.0.0
+    description: A Helm chart for Kubernetes
+    digest: a3e7b5d274a2ca09f0ea73effb89b84f852aa980ec733aa205b8684c7e3ef9ec
+    name: freeradius
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/freeradius-0.6.0/freeradius-0.6.0.tgz
+    version: 0.6.0
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -115,4 +131,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-05-22T08:15:22.795256261Z"
+generated: "2026-05-22T09:59:56.386143334Z"
