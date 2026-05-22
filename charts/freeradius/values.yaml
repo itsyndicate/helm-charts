@@ -1,5 +1,5 @@
 # -- Number of FreeRADIUS pod replicas
-replicaCount: 1
+replicaCount: 2
 
 # -- Override chart name
 nameOverride: ""
@@ -97,7 +97,7 @@ readinessProbe:
 # @section -- PDB Settings
 pdb:
   # -- Enable PodDisruptionBudget (meaningful only with replicaCount > 1)
-  create: false
+  create: true
   # -- Minimum available pods during voluntary disruptions
   minAvailable: 1
 
@@ -108,7 +108,8 @@ networkPolicy:
   additionalIngress: []
 
 # -- Node selector constraints
-nodeSelector: {}
+nodeSelector:
+  kubernetes.io/arch: amd64
 # -- Tolerations for pod scheduling
 tolerations: []
 # -- Affinity rules for pod scheduling

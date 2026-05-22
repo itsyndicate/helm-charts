@@ -86,18 +86,25 @@ spec:
             - name: radius-acct
               containerPort: {{ .Values.service.acctPort }}
               protocol: UDP
-          {{- if not .Values.externalSecret.dataFrom.enabled }}
+          {{- if or .Values.mariadb.enabled (not .Values.externalSecret.dataFrom.enabled) }}
           env:
-            - name: DB_USERNAME
+            {{- if .Values.mariadb.enabled }}
+            - name: DB_HOST
+              value: {{ printf "%s-mariadb" (include "freeradius.fullname" .) | quote }}
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: {{ .Values.mariadb.auth.database | quote }}
+            {{- end }}
+            {{- if not .Values.externalSecret.dataFrom.enabled }}
+            {{- range $envVar, $ref := .Values.externalSecret.remoteRefs }}
+            - name: {{ $envVar }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "freeradius.credentialsSecretName" . }}
-                  key: DB_USERNAME
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "freeradius.credentialsSecretName" . }}
-                  key: DB_PASSWORD
+                  name: {{ include "freeradius.credentialsSecretName" $ }}
+                  key: {{ $envVar }}
+            {{- end }}
+            {{- end }}
           {{- end }}
           {{- if .Values.externalSecret.dataFrom.enabled }}
           envFrom:
