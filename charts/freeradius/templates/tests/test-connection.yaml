@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "freeradius.fullname" . }}-test-connection"
+  labels:
+    {{- include "freeradius.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: radtest
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          radtest -t pap 00:11:22:33:44:55 00:11:22:33:44:55 \
+            {{ include "freeradius.fullname" . }}:{{ .Values.service.authPort }} 0 \
+            "$RADIUS_DEFAULT_SECRET" | grep -E "^(Access-Accept|Access-Reject|Received)" \
+            && echo "RADIUS responded (access may be rejected — that is expected for a test MAC)"
+      env:
+        - name: RADIUS_DEFAULT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "freeradius.credentialsSecretName" . }}
+              key: RADIUS_DEFAULT_SECRET
