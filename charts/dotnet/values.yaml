@@ -93,6 +93,10 @@ dotnet:
     name: http
     protocol: TCP
   env:
+    # -- Name of an existing Secret to use instead of creating one from variables.
+    # If set, the chart will not create its own Secret and will mount this one instead.
+    # @section -- Dotnet APP Settings
+    existingSecretName: ""
     # -- Use AWS secrets manager ref. Works with external-secrets operator
     # @section -- Dotnet APP Settings
     envFromSecretsManager:

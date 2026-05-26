@@ -37,7 +37,7 @@ spec:
           imagePullPolicy: {{ .Values.django.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ include "django.fullname" . }}-env-migration-secrets
+                name: {{ .Values.django.env.existingSecretName | default (printf "%s-env-migration-secrets" (include "django.fullname" .)) }}
             {{- if .Values.django.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "django.fullname" . }}-env-migration-ext-secrets
