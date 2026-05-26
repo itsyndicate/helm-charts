@@ -166,6 +166,10 @@ nextjs:
   # @section -- Next.js Settings
   port: 3000
   env:
+    # -- Name of an existing Secret to use instead of creating one from variables.
+    # If set, the chart will not create its own Secret and will mount this one in both the deployment and the pre-deploy job.
+    # @section -- Next.js Settings
+    existingSecretName: ""
     # -- Use AWS secrets manager ref. Works with external-secrets operator
     # @section -- Next.js Settings
     envFromSecretsManager:
