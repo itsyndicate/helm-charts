@@ -34,7 +34,7 @@ spec:
               {{- end }}
               envFrom:
                 - secretRef:
-                    name: {{ include "cronjobs.fullname" $ }}-env-secrets
+                    name: {{ $.Values.env.existingSecretName | default (printf "%s-env-secrets" (include "cronjobs.fullname" $)) }}
                 {{- if $.Values.env.envFromSecretsManager.enabled }}
                 - secretRef:
                     name: {{ include "cronjobs.fullname" $ }}-env-ext-secrets

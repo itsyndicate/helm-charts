@@ -151,6 +151,10 @@ django:
   # -- Django environment variables
   # @section -- Django Settings
   env:
+    # -- Name of an existing Secret to use instead of creating one from variables.
+    # If set, the chart will not create its own Secret and will mount this one in the deployment, workers, cronjobs, and migration job.
+    # @section -- Django Settings
+    existingSecretName: ""
     # -- Use AWS secrets manager ref. Works with external-secrets operator
     # @section -- Django Settings
     envFromSecretsManager:

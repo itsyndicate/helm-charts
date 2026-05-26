@@ -8,7 +8,7 @@ metadata:
   labels:
     {{- include "fastapi.labels" $ | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "fastapi.fullname" $ }}-env-secrets, {{ include "fastapi.fullname" $ }}-env-ext-secrets"
+    secret.reloader.stakater.com/reload: "{{ $.Values.fastapi.env.existingSecretName | default (printf "%s-env-secrets" (include "fastapi.fullname" $)) }}, {{ include "fastapi.fullname" $ }}-env-ext-secrets"
 spec:
   {{- if not $worker.autoscaling.enabled }}
   replicas: {{ $worker.replicaCount }}
@@ -47,7 +47,7 @@ spec:
           {{- end }}
           envFrom:
             - secretRef:
-                name: {{ include "fastapi.fullname" $ }}-env-secrets
+                name: {{ $.Values.fastapi.env.existingSecretName | default (printf "%s-env-secrets" (include "fastapi.fullname" $)) }}
             {{- if $.Values.fastapi.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "fastapi.fullname" $ }}-env-ext-secrets

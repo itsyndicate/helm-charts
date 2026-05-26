@@ -56,6 +56,10 @@ cronJobs:
 # -- Cron environment variables
 # @section -- Cron Settings
 env:
+  # -- Name of an existing Secret to use instead of creating one from variables.
+  # If set, the chart will not create its own Secret and will mount this one instead.
+  # @section -- Cron Settings
+  existingSecretName: ""
   # -- Use AWS secrets manager ref. Works with external-secrets operator
   # @section -- Cron Settings
   envFromSecretsManager:
