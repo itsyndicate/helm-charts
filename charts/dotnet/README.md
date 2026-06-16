@@ -23,7 +23,7 @@
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings |
+| ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings. Each path optionally accepts a `backend` field to override the default service backend — see [Per-path custom backend](#per-path-custom-backend). |
 | service | object | `{"port":5001,"type":"ClusterIP"}` | Service settings |
 
 ### NginX Settings
@@ -59,3 +59,28 @@
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. |
 | tolerations | list | `[]` | Tolerations settings |
+
+## Per-path custom backend
+
+By default every path in `ingress.hosts[].paths[]` routes to the chart's own service. You can override the backend per path by adding a `backend` field. This is useful for ALB fixed-response actions (e.g. returning 403 for a path on a public ALB while exposing it on an internal ALB).
+
+```yaml
+ingress:
+  enabled: true
+  annotations:
+    alb.ingress.kubernetes.io/actions.response-403: '{"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden"}}'
+  hosts:
+    - host: example.com
+      paths:
+        - path: /private
+          pathType: Prefix
+          backend:
+            service:
+              name: response-403
+              port:
+                name: use-annotation   # triggers the ALB fixed-response action above
+        - path: /
+          pathType: Prefix             # falls back to the chart's own service
+```
+
+If `backend` is omitted on a path, the chart's own service name and port are used — identical behaviour to previous versions.
