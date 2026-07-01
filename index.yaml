@@ -157,6 +157,22 @@ entries:
   freeradius:
   - apiVersion: v2
     appVersion: 3.2.8
+    created: "2026-07-01T11:42:54.848092843Z"
+    dependencies:
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20.0.0
+    description: FreeRADIUS Helm chart with HA, topology spread, and zero-downtime
+      NLB draining support
+    digest: fa68f15515bb2888eea91a639db04f78c2a177c92c04b2f4face6698c996f3f5
+    name: freeradius
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/freeradius-0.7.0/freeradius-0.7.0.tgz
+    version: 0.7.0
+  - apiVersion: v2
+    appVersion: 3.2.8
     created: "2026-05-22T09:59:56.386121674Z"
     dependencies:
     - condition: mariadb.enabled
@@ -221,4 +237,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-06-16T14:52:46.06475318Z"
+generated: "2026-07-01T11:42:54.848118231Z"
