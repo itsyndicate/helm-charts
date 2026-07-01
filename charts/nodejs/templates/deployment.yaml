@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "nodejs.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "nodejs.fullname" . }}-env-secrets, {{ include "nodejs.fullname" . }}-env-ext-secrets"
+    secret.reloader.stakater.com/reload: "{{ .Values.nodejs.env.existingSecretName | default (printf "%s-env-secrets" (include "nodejs.fullname" .)) }}, {{ include "nodejs.fullname" . }}-env-ext-secrets"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -42,10 +42,14 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- with .Values.nginx.livenessProbe }}
           livenessProbe:
-            {{- toYaml .Values.nginx.livenessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nginx.readinessProbe }}
           readinessProbe:
-            {{- toYaml .Values.nginx.readinessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.nginx.resources | nindent 12 }}
           volumeMounts:
@@ -63,7 +67,7 @@ spec:
           imagePullPolicy: {{ .Values.nodejs.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ include "nodejs.fullname" . }}-env-secrets
+                name: {{ .Values.nodejs.env.existingSecretName | default (printf "%s-env-secrets" (include "nodejs.fullname" .)) }}
             {{- if .Values.nodejs.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "nodejs.fullname" . }}-env-ext-secrets
@@ -72,10 +76,14 @@ spec:
             - name: http
               containerPort: {{ .Values.nodejs.port | default "3000" }}
               protocol: TCP
+          {{- with .Values.nodejs.livenessProbe }}
           livenessProbe:
-            {{- toYaml .Values.nodejs.livenessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nodejs.readinessProbe }}
           readinessProbe:
-            {{- toYaml .Values.nodejs.readinessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.nodejs.resources | nindent 12 }}
           {{- with .Values.nodejs.volumeMounts }}

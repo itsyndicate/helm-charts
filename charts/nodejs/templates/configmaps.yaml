@@ -87,7 +87,7 @@ data:
       # Virtual Host Configs
       ##
       upstream nodejs_upstream {
-          server localhost:3000;
+          server localhost:{{ .Values.nodejs.port | default "3000" }};
       }
 
       server {
