@@ -107,6 +107,31 @@ networkPolicy:
   # -- Extra ingress rules appended to the generated policy
   additionalIngress: []
 
+# -- Seconds the kubelet waits after SIGTERM before sending SIGKILL.
+# Unset by default (Kubernetes default of 30 s applies).
+# Pair with lifecycle.preStop to ensure NLB deregistration completes before the process exits.
+terminationGracePeriodSeconds: null
+
+# -- Lifecycle hooks for the freeradius container.
+# Use preStop to delay SIGTERM and allow NLB target deregistration to complete.
+# Example:
+#   lifecycle:
+#     preStop:
+#       exec:
+#         command: [/bin/sh, -c, sleep 15]
+lifecycle: {}
+
+# -- Topology spread constraints for scheduling pods across nodes/zones.
+# Example:
+#   topologySpreadConstraints:
+#     - maxSkew: 1
+#       topologyKey: kubernetes.io/hostname
+#       whenUnsatisfiable: DoNotSchedule
+#       labelSelector:
+#         matchLabels:
+#           app.kubernetes.io/name: freeradius
+topologySpreadConstraints: []
+
 # -- Node selector constraints
 nodeSelector:
   kubernetes.io/arch: amd64
