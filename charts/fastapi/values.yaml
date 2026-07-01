@@ -72,6 +72,11 @@ fastapi:
   # @section -- FastAPI Settings
   resources: {}
   env:
+    # -- Name of an existing Secret to use instead of creating one from variables.
+    # If set, the chart will not create its own Secret and will mount this one in the deployment and workers.
+    # Useful when secrets are managed externally (e.g. via External Secrets Operator).
+    # @section -- FastAPI Settings
+    existingSecretName: ""
     # -- Key-value pairs of environment variables (will be base64 encoded in the secret)
     # @section -- FastAPI Settings
     variables: {}

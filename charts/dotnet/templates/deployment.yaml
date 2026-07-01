@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "dotnet.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "dotnet.fullname" . }}-env-secrets, {{ include "dotnet.fullname" . }}-env-ext-secrets"
+    secret.reloader.stakater.com/reload: "{{ .Values.dotnet.env.existingSecretName | default (printf "%s-env-secrets" (include "dotnet.fullname" .)) }}, {{ include "dotnet.fullname" . }}-env-ext-secrets"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -40,7 +40,7 @@ spec:
           imagePullPolicy: {{ .Values.dotnet.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ include "dotnet.fullname" . }}-env-secrets
+                name: {{ .Values.dotnet.env.existingSecretName | default (printf "%s-env-secrets" (include "dotnet.fullname" .)) }}
             {{- if .Values.dotnet.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "dotnet.fullname" . }}-env-ext-secrets

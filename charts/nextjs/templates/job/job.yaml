@@ -1,24 +1,24 @@
-{{- if .Values.django.migrationJob.enabled -}}
+{{- if .Values.nextjs.preDeployJob.enabled -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "django.fullname" . }}-migration
+  name: {{ include "nextjs.fullname" . }}-pre-deploy
   labels:
-    app.kubernetes.io/component: migrate-job
+    app.kubernetes.io/component: pre-deploy-job
   annotations:
-    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-1"
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
+  backoffLimit: {{ .Values.nextjs.preDeployJob.backoffLimit }}
   template:
-    #    ttlSecondsAfterFinished: 60
     metadata:
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "django.labels" . | nindent 8 }}
+        {{- include "nextjs.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -32,26 +32,31 @@ spec:
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
-            {{- toYaml .Values.django.securityContext | nindent 12 }}
-          image: "{{ .Values.django.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+            {{- toYaml .Values.nextjs.securityContext | nindent 12 }}
+          image: "{{ .Values.nextjs.image.repository }}:{{ .Values.nextjs.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.nextjs.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ .Values.django.env.existingSecretName | default (printf "%s-env-migration-secrets" (include "django.fullname" .)) }}
-            {{- if .Values.django.env.envFromSecretsManager.enabled }}
+                name: {{ .Values.nextjs.env.existingSecretName | default (printf "%s-env-pre-deploy-secrets" (include "nextjs.fullname" .)) }}
+            {{- if .Values.nextjs.env.envFromSecretsManager.enabled }}
             - secretRef:
-                name: {{ include "django.fullname" . }}-env-migration-ext-secrets
+                name: {{ include "nextjs.fullname" . }}-env-ext-secrets
             {{- end }}
-          command: [ "/bin/bash", "-c" ]
+          {{- with .Values.nextjs.preDeployJob.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nextjs.preDeployJob.args }}
           args:
-            - touch /tmp/migrate.lock; while [ -f /tmp/migrate.lock ]; do sleep 5; done; exit 0
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
-            {{- toYaml .Values.django.resources | nindent 12 }}
-          {{- with .Values.django.volumeMounts }}
+            {{- toYaml .Values.nextjs.resources | nindent 12 }}
+          {{- with .Values.nextjs.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- with .Values.django.volumes }}
+      {{- with .Values.nextjs.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}

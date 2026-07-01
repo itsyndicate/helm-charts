@@ -1,0 +1,24 @@
+FreeRADIUS {{ .Chart.AppVersion }} has been deployed.
+
+Service: {{ .Values.service.type }}
+  Auth (UDP): {{ .Values.service.authPort }}
+  Acct (UDP): {{ .Values.service.acctPort }}
+
+{{- if eq .Values.service.type "LoadBalancer" }}
+
+Wait for the NLB to become available:
+  kubectl get svc --namespace {{ .Release.Namespace }} {{ include "freeradius.fullname" . }} -w
+
+{{- end }}
+
+{{- if .Values.externalSecret.enabled }}
+
+Credentials are managed by ExternalSecret → {{ .Values.externalSecret.secretStoreName }}.
+Verify the Secret was created:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "freeradius.credentialsSecretName" . }}
+{{- else }}
+
+IMPORTANT: externalSecret.enabled is false.
+The Secret {{ include "freeradius.credentialsSecretName" . }} must exist in namespace {{ .Release.Namespace }}
+with keys: DB_USERNAME, DB_PASSWORD, RADIUS_DEFAULT_SECRET.
+{{- end }}
