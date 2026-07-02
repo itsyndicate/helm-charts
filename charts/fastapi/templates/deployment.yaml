@@ -33,6 +33,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
+        {{- if .Values.nginx.enabled }}
         - name: {{ .Chart.Name }}-nginx
           securityContext:
             {{- toYaml .Values.nginx.securityContext | nindent 12 }}
@@ -58,14 +59,25 @@ spec:
           {{- with .Values.nginx.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- end }}
 
         - name: {{ .Chart.Name }}-fastapi-app
           securityContext:
             {{- toYaml .Values.fastapi.securityContext | nindent 12 }}
           image: "{{ .Values.fastapi.image.repository }}:{{ .Values.fastapi.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.fastapi.image.pullPolicy }}
+          {{- if .Values.fastapi.command }}
+          command: {{ toJson .Values.fastapi.command }}
+          {{- else }}
           command: [ "uvicorn" ]
+          {{- end }}
+          {{- if .Values.fastapi.args }}
+          args: {{ toJson .Values.fastapi.args }}
+          {{- else if not .Values.nginx.enabled }}
+          args: [ "--host", "0.0.0.0", "--port", "{{ .Values.fastapi.port }}", "--workers", "3", "main:app" ]
+          {{- else }}
           args: [ "--uds", "/tmp/uvicorn.sock", "--workers", "3", "main:app" ]
+          {{- end }}
           envFrom:
             - secretRef:
                 name: {{ .Values.fastapi.env.existingSecretName | default (printf "%s-env-secrets" (include "fastapi.fullname" .)) }}
@@ -73,31 +85,67 @@ spec:
             - secretRef:
                 name: {{ include "fastapi.fullname" . }}-env-ext-secrets
             {{- end }}
+          {{- if not .Values.nginx.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.fastapi.port }}
+              protocol: TCP
+          {{- end }}
+          {{- if .Values.fastapi.livenessProbe }}
           livenessProbe:
             {{- toYaml .Values.fastapi.livenessProbe | nindent 12 }}
+          {{- else if not .Values.nginx.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          {{- end }}
           readinessProbe:
+            {{- if .Values.fastapi.readinessProbe }}
             {{- toYaml .Values.fastapi.readinessProbe | nindent 12 }}
+            {{- else if .Values.nginx.enabled }}
+            exec:
+              command:
+                - ls
+                - /tmp/uvicorn.sock
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            {{- else }}
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            {{- end }}
           resources:
             {{- toYaml .Values.fastapi.resources | nindent 12 }}
           volumeMounts:
+            {{- if .Values.nginx.enabled }}
             - name: socket
               mountPath: /tmp
+            {{- end }}
           {{- with .Values.fastapi.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
 
       volumes:
+        {{- if .Values.nginx.enabled }}
         - name: socket
           emptyDir: { }
+        {{- end }}
+        {{- if .Values.nginx.enabled }}
         - name: nginx-conf
           configMap:
             name: {{ include "fastapi.fullname" $ }}-nginx-conf
             items:
               - key: nginx.conf
                 path: nginx.conf
-      {{- with .Values.nginx.volumes }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- with .Values.nginx.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
       {{- with .Values.fastapi.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
