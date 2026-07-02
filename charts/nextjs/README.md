@@ -1,6 +1,6 @@
 # nextjs
 
-![Version: 0.4.1](https://img.shields.io/badge/Version-0.4.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
+![Version: 0.4.4](https://img.shields.io/badge/Version-0.4.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
@@ -33,10 +33,15 @@ A Helm chart for Kubernetes
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | nginx | object | A complex object. Please check values below | NginX Specific Configurations |
+| nginx.enabled | bool | `true` | Enable NginX sidecar |
 | nginx.image | object | `{"pullPolicy":"IfNotPresent","repository":"nginx","tag":""}` | NginX image settings |
 | nginx.image.tag | string | `""` | Overrides the image tag whose default is the chart appVersion |
+| nginx.keepalive_timeout | int | `65` | Timeout during which a keep-alive client connection will stay open on the server side |
+| nginx.proxy_read_timeout | string | `"60s"` | Timeout for reading a response from the proxied server |
+| nginx.proxy_send_timeout | string | `"60s"` | Timeout for transmitting a request to the proxied server |
 | nginx.resources | object | `{}` | NginX container resources |
 | nginx.securityContext | object | `{}` | NginX container security context |
+| nginx.send_timeout | string | `"60s"` | Timeout for transmitting a response to the client |
 | nginx.volumeMounts | list | `[]` | NginX container additional volumes mounts |
 | nginx.volumes | list | `[]` | NginX container additional volumes |
 
