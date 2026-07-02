@@ -28,6 +28,9 @@ podSecurityContext: { }
 # @section -- NginX Settings
 # @default -- A complex object. Please check values below
 nginx:
+  # -- Enable NginX sidecar
+  # @section -- NginX Settings
+  enabled: true
   # -- NginX image settings
   # @section -- NginX Settings
   image:
@@ -85,6 +88,19 @@ nginx:
   #   mountPath: "/etc/foo"
   #   readOnly: true
 
+  # -- Timeout during which a keep-alive client connection will stay open on the server side
+  # @section -- NginX Settings
+  keepalive_timeout: 65
+  # -- Timeout for reading a response from the proxied server
+  # @section -- NginX Settings
+  proxy_read_timeout: 60s
+  # -- Timeout for transmitting a request to the proxied server
+  # @section -- NginX Settings
+  proxy_send_timeout: 60s
+  # -- Timeout for transmitting a response to the client
+  # @section -- NginX Settings
+  send_timeout: 60s
+
 # -- Django Specific Configurations
 # @section -- Django Settings
 # @default -- A complex object. Please check values below
@@ -97,6 +113,19 @@ django:
     # -- Overrides the image tag whose default is the chart appVersion
     # @section -- Django Settings
     tag: ""
+
+  # -- Override the default container command
+  # @section -- Django Settings
+  command: []
+  # -- Override the default container arguments
+  # @section -- Django Settings
+  args: []
+  # -- Port the app binds to (and the container/probe port) when the NginX sidecar is disabled
+  # (nginx.enabled=false). Keep it above 1024 so the container can bind without root / NET_BIND_SERVICE.
+  # When the NginX sidecar is enabled the app listens on a UNIX socket and this value is unused.
+  # @section -- Django Settings
+  port: 8000
+
   # -- Django container security context
   # @section -- Django Settings
   securityContext: { }
@@ -125,15 +154,14 @@ django:
   #    httpGet:
   #      path: /
   #      port: http
-  # -- Django container readiness probe
+  # -- Django container readiness probe. Leave empty to use the chart's mode-aware default:
+  # a UNIX socket check (ls /tmp/uvicorn.sock) when the NginX sidecar is enabled, or a TCP
+  # check on the app port when it is disabled. Set a value here to override the default.
   # @section -- Django Settings
-  readinessProbe:
-    exec:
-      command:
-        - ls
-        - /tmp/uvicorn.sock
-    initialDelaySeconds: 5
-    periodSeconds: 5
+  readinessProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
   # -- Django container additional volumes
   # @section -- Django Settings
   volumes: [ ]

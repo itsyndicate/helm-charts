@@ -33,6 +33,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
+        {{- if .Values.nginx.enabled }}
         - name: {{ .Chart.Name }}-nginx
           securityContext:
             {{- toYaml .Values.nginx.securityContext | nindent 12 }}
@@ -58,13 +59,24 @@ spec:
           {{- with .Values.nginx.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- end }}
         - name: {{ .Chart.Name }}-django-app
           securityContext:
             {{- toYaml .Values.django.securityContext | nindent 12 }}
           image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          {{- if .Values.django.command }}
+          command: {{ toJson .Values.django.command }}
+          {{- else }}
           command: [ "uvicorn" ]
+          {{- end }}
+          {{- if .Values.django.args }}
+          args: {{ toJson .Values.django.args }}
+          {{- else if not .Values.nginx.enabled }}
+          args: [ "--host", "0.0.0.0", "--port", "{{ .Values.django.port }}", "--workers", "3", "main:app" ]
+          {{- else }}
           args: [ "--uds", "/tmp/uvicorn.sock", "--workers", "3", "main:app" ]
+          {{- end }}
           envFrom:
             - secretRef:
                 name: {{ .Values.django.env.existingSecretName | default (printf "%s-env-secrets" (include "django.fullname" .)) }}
@@ -72,30 +84,58 @@ spec:
             - secretRef:
                 name: {{ include "django.fullname" . }}-env-ext-secrets
             {{- end }}
+          {{- if not .Values.nginx.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.django.port }}
+              protocol: TCP
+          {{- end }}
+          {{- with .Values.django.livenessProbe }}
           livenessProbe:
-            {{- toYaml .Values.django.livenessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           readinessProbe:
+            {{- if .Values.django.readinessProbe }}
             {{- toYaml .Values.django.readinessProbe | nindent 12 }}
+            {{- else if .Values.nginx.enabled }}
+            exec:
+              command:
+                - ls
+                - /tmp/uvicorn.sock
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            {{- else }}
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            {{- end }}
           resources:
             {{- toYaml .Values.django.resources | nindent 12 }}
           volumeMounts:
+            {{- if .Values.nginx.enabled }}
             - name: socket
               mountPath: /tmp
+            {{- end }}
           {{- with .Values.django.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
+        {{- if .Values.nginx.enabled }}
         - name: socket
           emptyDir: { }
+        {{- end }}
+        {{- if .Values.nginx.enabled }}
         - name: nginx-conf
           configMap:
             name: {{ include "django.fullname" $ }}-nginx-conf
             items:
               - key: nginx.conf
                 path: nginx.conf
-      {{- with .Values.nginx.volumes }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- with .Values.nginx.volumes }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
       {{- with .Values.django.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
