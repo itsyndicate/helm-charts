@@ -64,6 +64,18 @@ fastapi:
     # -- Image pull policy (Always, IfNotPresent, Never)
     pullPolicy: IfNotPresent
 
+  # -- Override the default container command
+  # @section -- FastAPI Settings
+  command: []
+  # -- Override the default container arguments
+  # @section -- FastAPI Settings
+  args: []
+  # -- Port the app binds to (and the container/probe port) when the NginX sidecar is disabled
+  # (nginx.enabled=false). Keep it above 1024 so the container can bind without root / NET_BIND_SERVICE.
+  # When the NginX sidecar is enabled the app listens on a UNIX socket and this value is unused.
+  # @section -- FastAPI Settings
+  port: 8000
+
   # -- Security context for the FastAPI container
   # @section -- FastAPI Settings
   securityContext: {}
@@ -88,23 +100,17 @@ fastapi:
       # -- Path to the secret in the external secrets manager
       secretPath: "path/to/secret"
 
-  # -- Liveness probe configuration for FastAPI
+  # -- Liveness probe for FastAPI. Leave empty to use the chart's mode-aware default: no liveness
+  # probe when the NginX sidecar is enabled (app on a UNIX socket), or an HTTP check on /health
+  # at the app port when it is disabled. Set a value here to override.
   # @section -- FastAPI Settings
-  livenessProbe:
-    httpGet:
-      path: /health
-      port: 8000
-    initialDelaySeconds: 10
-    periodSeconds: 10
+  livenessProbe: {}
 
-  # -- Readiness probe configuration for FastAPI
+  # -- Readiness probe for FastAPI. Leave empty to use the chart's mode-aware default: a UNIX socket
+  # check (ls /tmp/uvicorn.sock) when the NginX sidecar is enabled, or an HTTP check on /health at
+  # the app port when it is disabled. Set a value here to override.
   # @section -- FastAPI Settings
-  readinessProbe:
-    httpGet:
-      path: /health
-      port: 8000
-    initialDelaySeconds: 10
-    periodSeconds: 10
+  readinessProbe: {}
 
   # -- Additional volume mounts for FastAPI container
   # @section -- FastAPI Settings
@@ -169,6 +175,9 @@ fastapi:
 # @section -- NginX Settings
 # @default -- A complex object. Please check values below
 nginx:
+  # -- Enable NginX sidecar
+  # @section -- NginX Settings
+  enabled: true
   # @section -- NginX Settings
   image:
     # -- NginX Docker image repository
@@ -211,6 +220,19 @@ nginx:
   # -- Additional volumes for the NginX pods
   # @section -- NginX Settings
   volumes: []
+
+  # -- Timeout during which a keep-alive client connection will stay open on the server side
+  # @section -- NginX Settings
+  keepalive_timeout: 65
+  # -- Timeout for reading a response from the proxied server
+  # @section -- NginX Settings
+  proxy_read_timeout: 60s
+  # -- Timeout for transmitting a request to the proxied server
+  # @section -- NginX Settings
+  proxy_send_timeout: 60s
+  # -- Timeout for transmitting a response to the client
+  # @section -- NginX Settings
+  send_timeout: 60s
 
 # -- Node selector for pod placement
 nodeSelector: {}

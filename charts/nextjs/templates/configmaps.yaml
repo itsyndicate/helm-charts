@@ -1,3 +1,4 @@
+{{- if .Values.nginx.enabled -}}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -23,7 +24,10 @@ data:
       sendfile on;
       tcp_nopush on;
       types_hash_max_size 2048;
-      keepalive_timeout  65;
+      keepalive_timeout  {{ .Values.nginx.keepalive_timeout | default 65 }};
+      proxy_read_timeout {{ .Values.nginx.proxy_read_timeout | default "60s" }};
+      proxy_send_timeout {{ .Values.nginx.proxy_send_timeout | default "60s" }};
+      send_timeout       {{ .Values.nginx.send_timeout | default "60s" }};
       server_tokens off;
 
       # server_names_hash_bucket_size 64;
@@ -113,3 +117,4 @@ data:
         '' close;
       }
     }
+{{- end }}

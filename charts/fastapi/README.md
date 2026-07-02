@@ -1,6 +1,6 @@
 # fastapi
 
-![Version: 0.3.1](https://img.shields.io/badge/Version-0.3.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
+![Version: 0.3.4](https://img.shields.io/badge/Version-0.3.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
@@ -11,12 +11,15 @@ A Helm chart for Kubernetes
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | fastapi | object | A complex object. Please check values below | FastAPI-specific configurations |
+| fastapi.args | list | `[]` | Override the default container arguments |
+| fastapi.command | list | `[]` | Override the default container command |
 | fastapi.env.envFromSecretsManager | object | `{"enabled":false,"secretPath":"path/to/secret"}` | Use AWS secrets manager ref. Works with external-secrets operator |
 | fastapi.env.variables | object | `{}` | Key-value pairs of environment variables (will be base64 encoded in the secret) |
 | fastapi.image | object | `{"pullPolicy":"IfNotPresent","repository":"my-fastapi-image","tag":"latest"}` | FastAPI image settings |
 | fastapi.image.tag | string | `"latest"` | Tag of the FastAPI image |
-| fastapi.livenessProbe | object | `{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":10,"periodSeconds":10}` | Liveness probe configuration for FastAPI |
-| fastapi.readinessProbe | object | `{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":10,"periodSeconds":10}` | Readiness probe configuration for FastAPI |
+| fastapi.livenessProbe | object | `{}` | Liveness probe for FastAPI. Leave empty to use the chart's mode-aware default: no liveness probe when the NginX sidecar is enabled (app on a UNIX socket), or an HTTP check on /health at the app port when it is disabled. Set a value here to override. |
+| fastapi.port | int | `8000` | Port the app binds to (and the container/probe port) when the NginX sidecar is disabled (nginx.enabled=false). Keep it above 1024 so the container can bind without root / NET_BIND_SERVICE. When the NginX sidecar is enabled the app listens on a UNIX socket and this value is unused. |
+| fastapi.readinessProbe | object | `{}` | Readiness probe for FastAPI. Leave empty to use the chart's mode-aware default: a UNIX socket check (ls /tmp/uvicorn.sock) when the NginX sidecar is enabled, or an HTTP check on /health at the app port when it is disabled. Set a value here to override. |
 | fastapi.resources | object | `{}` | Resource limits and requests for the FastAPI container |
 | fastapi.securityContext | object | `{}` | Security context for the FastAPI container |
 | fastapi.volumeMounts | list | `[]` | Additional volume mounts for FastAPI container |
@@ -35,8 +38,13 @@ A Helm chart for Kubernetes
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | nginx | object | A complex object. Please check values below | NginX Specific Configurations |
+| nginx.enabled | bool | `true` | Enable NginX sidecar |
+| nginx.keepalive_timeout | int | `65` | Timeout during which a keep-alive client connection will stay open on the server side |
+| nginx.proxy_read_timeout | string | `"60s"` | Timeout for reading a response from the proxied server |
+| nginx.proxy_send_timeout | string | `"60s"` | Timeout for transmitting a request to the proxied server |
 | nginx.resources | object | `{}` | Resource limits and requests for NginX container |
 | nginx.securityContext | object | `{}` | Security context for the NginX container |
+| nginx.send_timeout | string | `"60s"` | Timeout for transmitting a response to the client |
 | nginx.volumeMounts | list | `[]` | Additional volume mounts for the NginX container |
 | nginx.volumes | list | `[]` | Additional volumes for the NginX pods |
 

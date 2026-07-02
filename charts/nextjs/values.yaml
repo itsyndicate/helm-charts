@@ -28,6 +28,9 @@ podSecurityContext: { }
 # @section -- NginX Settings
 # @default -- A complex object. Please check values below
 nginx:
+  # -- Enable NginX sidecar
+  # @section -- NginX Settings
+  enabled: true
   # -- NginX image settings
   # @section -- NginX Settings
   image:
@@ -84,6 +87,19 @@ nginx:
   # - name: foo
   #   mountPath: "/etc/foo"
   #   readOnly: true
+
+  # -- Timeout during which a keep-alive client connection will stay open on the server side
+  # @section -- NginX Settings
+  keepalive_timeout: 65
+  # -- Timeout for reading a response from the proxied server
+  # @section -- NginX Settings
+  proxy_read_timeout: 60s
+  # -- Timeout for transmitting a request to the proxied server
+  # @section -- NginX Settings
+  proxy_send_timeout: 60s
+  # -- Timeout for transmitting a response to the client
+  # @section -- NginX Settings
+  send_timeout: 60s
 
 # -- Next.js Specific Configurations
 # @section -- Next.js Settings
