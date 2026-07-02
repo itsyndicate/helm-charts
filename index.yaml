@@ -44,6 +44,16 @@ entries:
   django:
   - apiVersion: v2
     appVersion: 1.27.4
+    created: "2026-07-02T12:01:53.027054883Z"
+    description: A Helm chart for Kubernetes
+    digest: 89b9ef63415300b2b52598a3f4399f0c17219c91dd01088b8a3e577b6f08327f
+    name: django
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/django-0.2.4/django-0.2.4.tgz
+    version: 0.2.4
+  - apiVersion: v2
+    appVersion: 1.27.4
     created: "2026-06-16T14:52:45.523592061Z"
     description: A Helm chart for Kubernetes
     digest: 4fe3043c418b15709c7c3b212eb29157e9e7c34d1f2544c03165873033f1eece
@@ -114,6 +124,16 @@ entries:
     - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.0.1/dotnet-0.0.1.tgz
     version: 0.0.1
   fastapi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-07-02T12:01:53.18234411Z"
+    description: A Helm chart for Kubernetes
+    digest: 20fb501c09c3add880cf6a7c34ddc6ebb580e07f8284231def5fe382f9585697
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.3.4/fastapi-0.3.4.tgz
+    version: 0.3.4
   - apiVersion: v2
     appVersion: 1.16.0
     created: "2026-06-16T14:52:45.875859189Z"
@@ -189,6 +209,16 @@ entries:
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-07-02T12:01:53.328257211Z"
+    description: A Helm chart for Kubernetes
+    digest: 7acc92a5cf7d61675e41ef028d8b1d7af7d5ea18e56a8d76be5dc2924d9dd254
+    name: nextjs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.4.4/nextjs-0.4.4.tgz
+    version: 0.4.4
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-06-16T14:52:46.064679372Z"
     description: A Helm chart for Kubernetes
     digest: 7a2c0c2dd8dd0e363f550baa83ddd0561c33db653c25dda45b5bd4d294133f58
@@ -237,4 +267,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-01T11:42:54.848118231Z"
+generated: "2026-07-02T12:01:53.328324276Z"
