@@ -44,6 +44,16 @@ entries:
   django:
   - apiVersion: v2
     appVersion: 1.27.4
+    created: "2026-07-16T14:30:10.874255647Z"
+    description: A Helm chart for Kubernetes
+    digest: 769f8aee5aa7cdff4dedae9312c848b8d989582dbafc896ceb88336f30e25226
+    name: django
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/django-0.2.5/django-0.2.5.tgz
+    version: 0.2.5
+  - apiVersion: v2
+    appVersion: 1.27.4
     created: "2026-07-02T12:01:53.027054883Z"
     description: A Helm chart for Kubernetes
     digest: 89b9ef63415300b2b52598a3f4399f0c17219c91dd01088b8a3e577b6f08327f
@@ -95,6 +105,16 @@ entries:
   dotnet:
   - apiVersion: v2
     appVersion: 0.0.1
+    created: "2026-07-16T14:30:11.098828187Z"
+    description: A Helm chart for Kubernetes
+    digest: 9e5789052e807be87689be92f1e948eba17dcc72582487ea086e3ad82527879d
+    name: dotnet
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.1.2/dotnet-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 0.0.1
     created: "2026-06-16T14:52:45.69009797Z"
     description: A Helm chart for Kubernetes
     digest: e5bb0978d2396c3cbb190eb7462a16e0b1bf379f93876a14605b2f51bdc3c28e
@@ -124,6 +144,16 @@ entries:
     - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.0.1/dotnet-0.0.1.tgz
     version: 0.0.1
   fastapi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-07-16T14:30:11.315450775Z"
+    description: A Helm chart for Kubernetes
+    digest: 4f1e6d90b2e4a4433738486de03fd0721a88bf5699c09df0e68043e26740b641
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.3.5/fastapi-0.3.5.tgz
+    version: 0.3.5
   - apiVersion: v2
     appVersion: 1.16.0
     created: "2026-07-02T12:01:53.18234411Z"
@@ -177,6 +207,22 @@ entries:
   freeradius:
   - apiVersion: v2
     appVersion: 3.2.8
+    created: "2026-07-16T14:30:11.574100037Z"
+    dependencies:
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20.0.0
+    description: FreeRADIUS Helm chart with HA, topology spread, and zero-downtime
+      NLB draining support
+    digest: 625a1e7cae8586b946efbf2d8f723929447b29abb7edf08e0f5c93a7d93f1b92
+    name: freeradius
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/freeradius-0.7.1/freeradius-0.7.1.tgz
+    version: 0.7.1
+  - apiVersion: v2
+    appVersion: 3.2.8
     created: "2026-07-01T11:42:54.848092843Z"
     dependencies:
     - condition: mariadb.enabled
@@ -207,6 +253,16 @@ entries:
     - https://github.com/itsyndicate/helm-charts/releases/download/freeradius-0.6.0/freeradius-0.6.0.tgz
     version: 0.6.0
   nextjs:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-07-16T14:30:11.777853856Z"
+    description: A Helm chart for Kubernetes
+    digest: a3f1cfd085db4bf7bacd3a950eaa5776422f6308646a1bd12a14180d3a2be250
+    name: nextjs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.4.5/nextjs-0.4.5.tgz
+    version: 0.4.5
   - apiVersion: v2
     appVersion: 1.16.0
     created: "2026-07-02T12:01:53.328257211Z"
@@ -267,4 +323,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-02T12:01:53.328324276Z"
+generated: "2026-07-16T14:30:11.777912225Z"
