@@ -1,5 +1,7 @@
 # -- Number of replicas to sping up
 replicaCount: 1
+# -- Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10)
+revisionHistoryLimit: 3
 # -- Secret that used to store docker registry credentials
 imagePullSecrets: [ ]
 # -- Overrides release name

@@ -1,5 +1,7 @@
 # -- Number of FreeRADIUS pod replicas
 replicaCount: 2
+# -- Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10)
+revisionHistoryLimit: 3
 
 # -- Override chart name
 nameOverride: ""
