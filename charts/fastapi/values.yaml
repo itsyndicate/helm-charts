@@ -1,5 +1,7 @@
 # -- Number of replicas to spin up
 replicaCount: 1
+# -- Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10)
+revisionHistoryLimit: 3
 
 # -- Secret used to store Docker registry credentials
 imagePullSecrets: []
