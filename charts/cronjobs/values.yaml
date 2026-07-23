@@ -56,9 +56,10 @@ cronJobs:
 # -- Cron environment variables
 # @section -- Cron Settings
 env:
-  # -- Name of an existing Secret to use instead of creating one from variables.
-  # If set, the chart will not create its own Secret and will mount this one instead.
-  # Useful when secrets are managed externally (e.g. via External Secrets Operator).
+  # -- Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator).
+  # Mounted additively alongside `variables` and `envFromSecretsManager` — it does NOT disable
+  # `variables`. On key collisions the existing Secret wins over `variables`, and
+  # `envFromSecretsManager` wins over both.
   # @section -- Cron Settings
   existingSecretName: ""
   # -- Use AWS secrets manager ref. Works with external-secrets operator
@@ -66,7 +67,7 @@ env:
   envFromSecretsManager:
     enabled: true
     secretPath: dev/skidochki/env-secrets
-  # -- Extra env variables
+  # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
   # @section -- Cron Settings
-  variables:
-    DEBUG: "True"
+  variables: {}
+  #  DEBUG: "True"

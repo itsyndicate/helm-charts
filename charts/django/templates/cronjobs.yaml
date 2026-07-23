@@ -32,7 +32,11 @@ spec:
               {{- end }}
               envFrom:
                 - secretRef:
-                    name: {{ $.Values.django.env.existingSecretName | default (printf "%s-env-secrets" (include "django.fullname" $)) }}
+                    name: {{ include "django.fullname" $ }}-env-secrets
+                {{- if $.Values.django.env.existingSecretName }}
+                - secretRef:
+                    name: {{ $.Values.django.env.existingSecretName }}
+                {{- end }}
                 {{- if $.Values.django.env.envFromSecretsManager.enabled }}
                 - secretRef:
                     name: {{ include "django.fullname" $ }}-env-ext-secrets

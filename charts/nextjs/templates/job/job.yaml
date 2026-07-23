@@ -37,7 +37,11 @@ spec:
           imagePullPolicy: {{ .Values.nextjs.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ .Values.nextjs.env.existingSecretName | default (printf "%s-env-pre-deploy-secrets" (include "nextjs.fullname" .)) }}
+                name: {{ include "nextjs.fullname" . }}-env-pre-deploy-secrets
+            {{- if .Values.nextjs.env.existingSecretName }}
+            - secretRef:
+                name: {{ .Values.nextjs.env.existingSecretName }}
+            {{- end }}
             {{- if .Values.nextjs.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "nextjs.fullname" . }}-env-ext-secrets
