@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "fastapi.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ .Values.fastapi.env.existingSecretName | default (printf "%s-env-secrets" (include "fastapi.fullname" .)) }}, {{ include "fastapi.fullname" . }}-env-ext-secrets"
+    secret.reloader.stakater.com/reload: "{{ include "fastapi.fullname" . }}-env-secrets{{ with .Values.fastapi.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "fastapi.fullname" . }}-env-ext-secrets"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -83,7 +83,11 @@ spec:
           {{- end }}
           envFrom:
             - secretRef:
-                name: {{ .Values.fastapi.env.existingSecretName | default (printf "%s-env-secrets" (include "fastapi.fullname" .)) }}
+                name: {{ include "fastapi.fullname" . }}-env-secrets
+            {{- if .Values.fastapi.env.existingSecretName }}
+            - secretRef:
+                name: {{ .Values.fastapi.env.existingSecretName }}
+            {{- end }}
             {{- if .Values.fastapi.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "fastapi.fullname" . }}-env-ext-secrets
