@@ -181,9 +181,10 @@ django:
   # -- Django environment variables
   # @section -- Django Settings
   env:
-    # -- Name of an existing Secret to use instead of creating one from variables.
-    # If set, the chart will not create its own Secret and will mount this one in the deployment, workers, cronjobs, and migration job.
-    # Useful when secrets are managed externally (e.g. via External Secrets Operator).
+    # -- Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator).
+    # Mounted additively alongside `variables` and `envFromSecretsManager` on the deployment, workers,
+    # cronjobs, and migration job — it does NOT disable `variables`. On key collisions the existing
+    # Secret wins over `variables`, and `envFromSecretsManager` wins over both.
     # @section -- Django Settings
     existingSecretName: ""
     # -- Use AWS secrets manager ref. Works with external-secrets operator
@@ -191,12 +192,12 @@ django:
     envFromSecretsManager:
       enabled: false
       secretPath: dev/example-com/env-secrets
-    # -- Extra env variables
+    # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
     # @section -- Django Settings
-    variables:
-      PYTHONUNBUFFERED: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
-      DEBUG: "True"
+    variables: {}
+    #  PYTHONUNBUFFERED: "1"
+    #  PYTHONDONTWRITEBYTECODE: "1"
+    #  DEBUG: "True"
   # -- Enables migration job before rolling the update
   # @section -- Django Settings
   migrationJob:

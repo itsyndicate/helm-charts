@@ -184,9 +184,10 @@ nextjs:
   # @section -- Next.js Settings
   port: 3000
   env:
-    # -- Name of an existing Secret to use instead of creating one from variables.
-    # If set, the chart will not create its own Secret and will mount this one in both the deployment and the pre-deploy job.
-    # Useful when secrets are managed externally (e.g. via External Secrets Operator).
+    # -- Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator).
+    # Mounted additively alongside `variables` and `envFromSecretsManager` on the deployment and the
+    # pre-deploy job — it does NOT disable `variables`. On key collisions the existing Secret wins over
+    # `variables` (it is mounted after), and `envFromSecretsManager` wins over both.
     # @section -- Next.js Settings
     existingSecretName: ""
     # -- Use AWS secrets manager ref. Works with external-secrets operator
@@ -194,10 +195,10 @@ nextjs:
     envFromSecretsManager:
       enabled: false
       secretPath: dev/example-com/env-secrets
-    # -- Extra env variables
+    # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
     # @section -- Next.js Settings
-    variables:
-      APP_DOMAIN: "example.com"
+    variables: {}
+    #  APP_DOMAIN: "example.com"
 
 
 # -- Service settings

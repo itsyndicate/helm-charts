@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "nextjs.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ .Values.nextjs.env.existingSecretName | default (printf "%s-env-secrets" (include "nextjs.fullname" .)) }}, {{ include "nextjs.fullname" . }}-env-ext-secrets"
+    secret.reloader.stakater.com/reload: "{{ include "nextjs.fullname" . }}-env-secrets{{ with .Values.nextjs.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "nextjs.fullname" . }}-env-ext-secrets"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -68,7 +68,11 @@ spec:
           imagePullPolicy: {{ .Values.nextjs.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ .Values.nextjs.env.existingSecretName | default (printf "%s-env-secrets" (include "nextjs.fullname" .)) }}
+                name: {{ include "nextjs.fullname" . }}-env-secrets
+            {{- if .Values.nextjs.env.existingSecretName }}
+            - secretRef:
+                name: {{ .Values.nextjs.env.existingSecretName }}
+            {{- end }}
             {{- if .Values.nextjs.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "nextjs.fullname" . }}-env-ext-secrets

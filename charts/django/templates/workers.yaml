@@ -8,7 +8,7 @@ metadata:
   labels:
     {{- include "django.labels" $ | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ $.Values.django.env.existingSecretName | default (printf "%s-env-secrets" (include "django.fullname" $)) }}, {{ include "django.fullname" $ }}-env-ext-secrets"
+    secret.reloader.stakater.com/reload: "{{ include "django.fullname" $ }}-env-secrets{{ with $.Values.django.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "django.fullname" $ }}-env-ext-secrets"
 spec:
   {{- if not $worker.autoscaling.enabled }}
   replicas: {{ $worker.replicaCount }}
@@ -47,7 +47,11 @@ spec:
           {{- end }}
           envFrom:
             - secretRef:
-                name: {{ $.Values.django.env.existingSecretName | default (printf "%s-env-secrets" (include "django.fullname" $)) }}
+                name: {{ include "django.fullname" $ }}-env-secrets
+            {{- if $.Values.django.env.existingSecretName }}
+            - secretRef:
+                name: {{ $.Values.django.env.existingSecretName }}
+            {{- end }}
             {{- if $.Values.django.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "django.fullname" $ }}-env-ext-secrets

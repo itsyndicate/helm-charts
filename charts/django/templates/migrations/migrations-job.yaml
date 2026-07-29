@@ -33,11 +33,15 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.django.securityContext | nindent 12 }}
-          image: "{{ .Values.django.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.django.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ .Values.django.env.existingSecretName | default (printf "%s-env-migration-secrets" (include "django.fullname" .)) }}
+                name: {{ include "django.fullname" . }}-env-migration-secrets
+            {{- if .Values.django.env.existingSecretName }}
+            - secretRef:
+                name: {{ .Values.django.env.existingSecretName }}
+            {{- end }}
             {{- if .Values.django.env.envFromSecretsManager.enabled }}
             - secretRef:
                 name: {{ include "django.fullname" . }}-env-migration-ext-secrets
