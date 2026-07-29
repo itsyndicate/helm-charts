@@ -3,6 +3,16 @@ entries:
   cronjobs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-07-29T09:57:13.362370305Z"
+    description: A Helm chart for Kubernetes
+    digest: e471ac24346d8f98289c8d1198c9b7021fc06bd3cca788677ec9515dfd6ad5ca
+    name: cronjobs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/cronjobs-0.4.0/cronjobs-0.4.0.tgz
+    version: 0.4.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-05-26T13:37:01.568356547Z"
     description: A Helm chart for Kubernetes
     digest: c346b8f34a05ebf7f50f212df7ab3dcb17ba1d58bbda94cc0ce356542c48d024
@@ -42,6 +52,16 @@ entries:
     - https://github.com/itsyndicate/helm-charts/releases/download/cronjobs-0.1.0/cronjobs-0.1.0.tgz
     version: 0.1.0
   django:
+  - apiVersion: v2
+    appVersion: 1.27.4
+    created: "2026-07-29T09:57:13.586999334Z"
+    description: A Helm chart for Kubernetes
+    digest: 2b0cf1b8dcc6d7ad77459d2fe5b35556cd5cffcc7b5eebf28a5e278731e1e433
+    name: django
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/django-0.3.0/django-0.3.0.tgz
+    version: 0.3.0
   - apiVersion: v2
     appVersion: 1.27.4
     created: "2026-07-16T14:30:10.874255647Z"
@@ -105,6 +125,16 @@ entries:
   dotnet:
   - apiVersion: v2
     appVersion: 0.0.1
+    created: "2026-07-29T09:57:13.836349709Z"
+    description: A Helm chart for Kubernetes
+    digest: 9331edd5b5bbec077d806cda26085bb77af91a2afd24d185804cc9cddf72365a
+    name: dotnet
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.2.0/dotnet-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
+    appVersion: 0.0.1
     created: "2026-07-16T14:30:11.098828187Z"
     description: A Helm chart for Kubernetes
     digest: 9e5789052e807be87689be92f1e948eba17dcc72582487ea086e3ad82527879d
@@ -144,6 +174,16 @@ entries:
     - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.0.1/dotnet-0.0.1.tgz
     version: 0.0.1
   fastapi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-07-29T09:57:14.075263855Z"
+    description: A Helm chart for Kubernetes
+    digest: 59a3784bebea4cba0d8a6b8e1917aa7d4473efcb0dfb1ab30e4dc34829bc973c
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.4.0/fastapi-0.4.0.tgz
+    version: 0.4.0
   - apiVersion: v2
     appVersion: 1.16.0
     created: "2026-07-16T14:30:11.315450775Z"
@@ -255,6 +295,16 @@ entries:
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-07-29T09:57:14.301727072Z"
+    description: A Helm chart for Kubernetes
+    digest: 6dd196f696bf25b675becd58138b6c4674d39a412387632c337e870aeb53e616
+    name: nextjs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.5.0/nextjs-0.5.0.tgz
+    version: 0.5.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-07-16T14:30:11.777853856Z"
     description: A Helm chart for Kubernetes
     digest: a3f1cfd085db4bf7bacd3a950eaa5776422f6308646a1bd12a14180d3a2be250
@@ -323,4 +373,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-16T14:30:11.777912225Z"
+generated: "2026-07-29T09:57:14.301888514Z"
