@@ -1,6 +1,6 @@
 # nextjs
 
-![Version: 0.4.4](https://img.shields.io/badge/Version-0.4.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
+![Version: 0.6.0](https://img.shields.io/badge/Version-0.6.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
@@ -18,13 +18,27 @@ A Helm chart for Kubernetes
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | nextjs | object | A complex object. Please check values below | Next.js Specific Configurations |
-| nextjs.env.envFromSecretsManager | object | `{"enabled":false,"secretPath":"dev/example-com/env-secrets"}` | Use AWS secrets manager ref. Works with external-secrets operator |
-| nextjs.env.variables | object | `{"APP_DOMAIN":"example.com"}` | Extra env variables |
+| nextjs.env.envFromSecretsManager | object | `{"enabled":false,"refreshInterval":"1m","secretPath":"","secretPaths":[],"secretStoreKind":"ClusterSecretStore","secretStoreName":"global-secret-store"}` | Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own ExternalSecret, mounted as env after `existingSecretName`. |
+| nextjs.env.envFromSecretsManager.enabled | bool | `false` | Render the ExternalSecrets and mount them as env |
+| nextjs.env.envFromSecretsManager.refreshInterval | string | `"1m"` | How often External Secrets Operator refreshes the secrets |
+| nextjs.env.envFromSecretsManager.secretPath | string | `""` | Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`; setting both fails the render, and so does setting neither while `enabled` is true. |
+| nextjs.env.envFromSecretsManager.secretPaths | list | `[]` | Secret paths mounted in list order. On key collisions a later path wins over an earlier one. Set either this or `secretPath`. |
+| nextjs.env.envFromSecretsManager.secretStoreKind | string | `"ClusterSecretStore"` | Kind of the secret store: ClusterSecretStore or SecretStore |
+| nextjs.env.envFromSecretsManager.secretStoreName | string | `"global-secret-store"` | Name of the secret store the ExternalSecrets reference |
+| nextjs.env.existingSecretName | string | `""` | Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator). Mounted additively alongside `variables` and `envFromSecretsManager` on the deployment and the pre-deploy job — it does NOT disable `variables`. On key collisions the existing Secret wins over `variables` (it is mounted after), and `envFromSecretsManager` wins over both. |
+| nextjs.env.variables | object | `{}` | Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set. |
 | nextjs.image | object | `{"pullPolicy":"IfNotPresent","repository":"nextjs","tag":""}` | Next.js image settings |
 | nextjs.image.tag | string | `""` | Overrides the image tag whose default is the chart appVersion |
+| nextjs.livenessProbe | object | `{}` | Next.js container liveness probe. Not rendered unless set. |
 | nextjs.port | int | `3000` | Next.js environment variables |
+| nextjs.preDeployJob | object | `{"args":[],"backoffLimit":6,"command":[],"enabled":false}` | Enables pre-deploy job with Helm hook before rolling the update |
+| nextjs.preDeployJob.args | list | `[]` | Arguments to pass to the command |
+| nextjs.preDeployJob.backoffLimit | int | `6` | Number of retries before marking the job as failed |
+| nextjs.preDeployJob.command | list | `[]` | Command to run in the job container |
+| nextjs.readinessProbe | object | `{}` | Next.js container readiness probe. Not rendered unless set. |
 | nextjs.resources | object | `{}` | Next.js container resources |
 | nextjs.securityContext | object | `{}` | Next.js container security context |
+| nextjs.startupProbe | object | `{}` | Next.js container startup probe. Not rendered unless set. |
 | nextjs.volumeMounts | list | `[]` | Next.js container additional volumes mounts |
 | nextjs.volumes | list | `[]` | Next.js container additional volumes |
 
@@ -45,6 +59,12 @@ A Helm chart for Kubernetes
 | nginx.volumeMounts | list | `[]` | NginX container additional volumes mounts |
 | nginx.volumes | list | `[]` | NginX container additional volumes |
 
+### PDB Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| pdb | object | `{"create":false,"minAvailable":1}` | Pod Disruption Budget settings |
+
 ### Other Values
 
 | Key | Type | Default | Description |
@@ -60,6 +80,7 @@ A Helm chart for Kubernetes
 | podLabels | object | `{}` | Labels to add to the pod |
 | podSecurityContext | object | `{}` | Security context of the pod |
 | replicaCount | int | `1` | Number of replicas to sping up |
+| revisionHistoryLimit | int | `3` | Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10) |
 | serviceAccount | object | `{"annotations":{},"automount":true,"create":true,"name":""}` | Service Account |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
 | serviceAccount.automount | bool | `true` | Automatically mount a ServiceAccount's API credentials? |
@@ -91,6 +112,43 @@ ingress:
 ```
 
 If `backend` is omitted on a path, the chart's own service name and port are used — identical behaviour to previous versions.
+
+## Several Secrets Manager paths
+
+`nextjs.env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
+
+```yaml
+nextjs:
+  env:
+    envFromSecretsManager:
+      enabled: true
+      secretStoreName: global-secret-store
+      refreshInterval: 5m
+      secretPaths:
+        - dev/example-com/shared-env
+        - dev/example-com/env-secrets
+```
+
+`secretPath` renders a single ExternalSecret named `<fullname>-env-ext-secrets`, as in previous versions. Set either `secretPath` or `secretPaths`: setting both fails the render, and so does setting neither while `enabled` is true. `secretPath` defaults to empty, so a release that enables Secrets Manager must set one of them.
+
+## Probes
+
+The chart renders no probes on the Next.js container by default. Each of `nextjs.startupProbe`, `nextjs.readinessProbe` and `nextjs.livenessProbe` is rendered only when set.
+
+```yaml
+nextjs:
+  startupProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 5
+    failureThreshold: 30
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 10
+```
 
 ----------------------------------------------
 Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)

@@ -1,0 +1,71 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.valuesSection" . }}
+
+## Per-path custom backend
+
+By default every path in `ingress.hosts[].paths[]` routes to the chart's own service. You can override the backend per path by adding a `backend` field. This is useful for ALB fixed-response actions (e.g. returning 403 for a path on a public ALB while exposing it on an internal ALB).
+
+```yaml
+ingress:
+  enabled: true
+  annotations:
+    alb.ingress.kubernetes.io/actions.response-403: '{"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden"}}'
+  hosts:
+    - host: example.com
+      paths:
+        - path: /private
+          pathType: Prefix
+          backend:
+            service:
+              name: response-403
+              port:
+                name: use-annotation   # triggers the ALB fixed-response action above
+        - path: /
+          pathType: Prefix             # falls back to the chart's own service
+```
+
+If `backend` is omitted on a path, the chart's own service name and port are used — identical behaviour to previous versions.
+
+## Several Secrets Manager paths
+
+`nextjs.env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
+
+```yaml
+nextjs:
+  env:
+    envFromSecretsManager:
+      enabled: true
+      secretStoreName: global-secret-store
+      refreshInterval: 5m
+      secretPaths:
+        - dev/example-com/shared-env
+        - dev/example-com/env-secrets
+```
+
+`secretPath` renders a single ExternalSecret named `<fullname>-env-ext-secrets`, as in previous versions. Set either `secretPath` or `secretPaths`: setting both fails the render, and so does setting neither while `enabled` is true. `secretPath` defaults to empty, so a release that enables Secrets Manager must set one of them.
+
+## Probes
+
+The chart renders no probes on the Next.js container by default. Each of `nextjs.startupProbe`, `nextjs.readinessProbe` and `nextjs.livenessProbe` is rendered only when set.
+
+```yaml
+nextjs:
+  startupProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 5
+    failureThreshold: 30
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 10
+```
+
+{{ template "helm-docs.versionFooter" . }}

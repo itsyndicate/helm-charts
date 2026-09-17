@@ -42,9 +42,9 @@ spec:
             - secretRef:
                 name: {{ .Values.nextjs.env.existingSecretName }}
             {{- end }}
-            {{- if .Values.nextjs.env.envFromSecretsManager.enabled }}
+            {{- range (include "nextjs.extSecretNames" . | splitList "," | compact) }}
             - secretRef:
-                name: {{ include "nextjs.fullname" . }}-env-ext-secrets
+                name: {{ . }}
             {{- end }}
           {{- with .Values.nextjs.preDeployJob.command }}
           command:

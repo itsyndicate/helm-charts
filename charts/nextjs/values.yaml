@@ -137,20 +137,27 @@ nextjs:
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
-  # -- Next.js container liveness probe
+  # -- Next.js container startup probe. Not rendered unless set.
   # @section -- Next.js Settings
-  #  livenessProbe:
-  #    httpGet:
-  #      path: /
-  #      port: http
-  # -- Next.js container readiness probe
+  startupProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
+  #  periodSeconds: 5
+  #  failureThreshold: 30
+  # -- Next.js container readiness probe. Not rendered unless set.
   # @section -- Next.js Settings
-  #  readinessProbe:
-  #      httpGet:
-  #        path: /
-  #        port: http
-  #    initialDelaySeconds: 5
-  #    periodSeconds: 5
+  readinessProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
+  #  periodSeconds: 10
+  # -- Next.js container liveness probe. Not rendered unless set.
+  # @section -- Next.js Settings
+  livenessProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
   # -- Next.js container additional volumes
   # @section -- Next.js Settings
   volumes: [ ]
@@ -190,11 +197,32 @@ nextjs:
     # `variables` (it is mounted after), and `envFromSecretsManager` wins over both.
     # @section -- Next.js Settings
     existingSecretName: ""
-    # -- Use AWS secrets manager ref. Works with external-secrets operator
+    # -- Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own
+    # ExternalSecret, mounted as env after `existingSecretName`.
     # @section -- Next.js Settings
     envFromSecretsManager:
+      # -- Render the ExternalSecrets and mount them as env
+      # @section -- Next.js Settings
       enabled: false
-      secretPath: dev/example-com/env-secrets
+      # -- Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`;
+      # setting both fails the render, and so does setting neither while `enabled` is true.
+      # @section -- Next.js Settings
+      secretPath: ""
+      # -- Secret paths mounted in list order. On key collisions a later path wins over an earlier one.
+      # Set either this or `secretPath`.
+      # @section -- Next.js Settings
+      secretPaths: []
+      #  - dev/example-com/shared-env
+      #  - dev/example-com/env-secrets
+      # -- Name of the secret store the ExternalSecrets reference
+      # @section -- Next.js Settings
+      secretStoreName: global-secret-store
+      # -- Kind of the secret store: ClusterSecretStore or SecretStore
+      # @section -- Next.js Settings
+      secretStoreKind: ClusterSecretStore
+      # -- How often External Secrets Operator refreshes the secrets
+      # @section -- Next.js Settings
+      refreshInterval: 1m
     # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
     # @section -- Next.js Settings
     variables: {}
@@ -206,7 +234,7 @@ nextjs:
 service:
   type: ClusterIP
   port: 80
-# -- Ingress settings
+# -- Ingress settings. Each path optionally accepts a `backend` field to override the default service backend — see [Per-path custom backend](#per-path-custom-backend).
 # @section -- Networking Settings
 ingress:
   # -- Enables ingress when true

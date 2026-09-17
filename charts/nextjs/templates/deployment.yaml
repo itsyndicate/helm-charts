@@ -5,7 +5,12 @@ metadata:
   labels:
     {{- include "nextjs.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "nextjs.fullname" . }}-env-secrets{{ with .Values.nextjs.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "nextjs.fullname" . }}-env-ext-secrets"
+    {{- $reload := list (printf "%s-env-secrets" (include "nextjs.fullname" .)) }}
+    {{- with .Values.nextjs.env.existingSecretName }}
+    {{- $reload = append $reload . }}
+    {{- end }}
+    {{- $reload = concat $reload (include "nextjs.extSecretNames" . | splitList "," | compact) }}
+    secret.reloader.stakater.com/reload: {{ join ", " $reload | quote }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -73,20 +78,24 @@ spec:
             - secretRef:
                 name: {{ .Values.nextjs.env.existingSecretName }}
             {{- end }}
-            {{- if .Values.nextjs.env.envFromSecretsManager.enabled }}
+            {{- range (include "nextjs.extSecretNames" . | splitList "," | compact) }}
             - secretRef:
-                name: {{ include "nextjs.fullname" . }}-env-ext-secrets
+                name: {{ . }}
             {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.nextjs.port | default "3000" }}
               protocol: TCP
-          {{- with .Values.nextjs.livenessProbe }}
-          livenessProbe:
+          {{- with .Values.nextjs.startupProbe }}
+          startupProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.nextjs.readinessProbe }}
           readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nextjs.livenessProbe }}
+          livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           resources:
