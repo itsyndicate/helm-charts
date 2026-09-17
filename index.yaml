@@ -295,6 +295,16 @@ entries:
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-09-17T02:06:19.783112694Z"
+    description: A Helm chart for Kubernetes
+    digest: b11da50bc9bf5d4aab0c3e49053c954a54d4ce3e0334b5aac74377921fa39341
+    name: nextjs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.6.0/nextjs-0.6.0.tgz
+    version: 0.6.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-07-29T09:57:14.301727072Z"
     description: A Helm chart for Kubernetes
     digest: 6dd196f696bf25b675becd58138b6c4674d39a412387632c337e870aeb53e616
@@ -373,4 +383,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-29T09:57:14.301888514Z"
+generated: "2026-09-17T02:06:19.783164841Z"
