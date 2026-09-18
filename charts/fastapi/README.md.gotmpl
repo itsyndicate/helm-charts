@@ -2,6 +2,8 @@
 
 {{ template "chart.badgesSection" . }}
 
+{{ template "chart.description" . }}
+
 {{ template "chart.valuesSection" . }}
 
 ## Per-path custom backend
@@ -31,10 +33,10 @@ If `backend` is omitted on a path, the chart's own service name and port are use
 
 ## Several Secrets Manager paths
 
-`dotnet.env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
+`fastapi.env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
 
 ```yaml
-dotnet:
+fastapi:
   env:
     envFromSecretsManager:
       enabled: true
@@ -49,13 +51,13 @@ dotnet:
 
 ## Probes
 
-Each of `dotnet.startupProbe`, `dotnet.readinessProbe` and `dotnet.livenessProbe` is rendered only when set. Earlier versions emitted `livenessProbe: null` and `readinessProbe: null` on the container whenever they were left unset.
+`fastapi.startupProbe` is rendered only when set. The mode-aware liveness and readiness defaults are unchanged: with the NginX sidecar enabled the app container gets no liveness probe and a UNIX socket readiness check, and with it disabled both are HTTP checks on `/health` at the app port.
 
 ```yaml
-dotnet:
+fastapi:
   startupProbe:
     httpGet:
-      path: /
+      path: /health
       port: http
     periodSeconds: 5
     failureThreshold: 30

@@ -60,3 +60,45 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "django.validateSecretsManager" -}}
+{{- $sm := .Values.django.env.envFromSecretsManager -}}
+{{- if and $sm.secretPath $sm.secretPaths -}}
+{{- fail "django.env.envFromSecretsManager: set either secretPath or secretPaths, not both" -}}
+{{- end -}}
+{{- if and $sm.enabled (not $sm.secretPath) (not $sm.secretPaths) -}}
+{{- fail "django.env.envFromSecretsManager.enabled is true: set secretPath or secretPaths" -}}
+{{- end -}}
+{{- end }}
+
+{{- define "django.extSecretNames" -}}
+{{- $fullname := include "django.fullname" . -}}
+{{- $sm := .Values.django.env.envFromSecretsManager -}}
+{{- $names := list -}}
+{{- if $sm.enabled -}}
+{{- if $sm.secretPaths -}}
+{{- range $i, $path := $sm.secretPaths -}}
+{{- $names = append $names (printf "%s-env-ext-secrets-%d" $fullname $i) -}}
+{{- end -}}
+{{- else -}}
+{{- $names = append $names (printf "%s-env-ext-secrets" $fullname) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end }}
+
+{{- define "django.migrationExtSecretNames" -}}
+{{- $fullname := include "django.fullname" . -}}
+{{- $sm := .Values.django.env.envFromSecretsManager -}}
+{{- $names := list -}}
+{{- if $sm.enabled -}}
+{{- if $sm.secretPaths -}}
+{{- range $i, $path := $sm.secretPaths -}}
+{{- $names = append $names (printf "%s-env-migration-ext-secrets-%d" $fullname $i) -}}
+{{- end -}}
+{{- else -}}
+{{- $names = append $names (printf "%s-env-migration-ext-secrets" $fullname) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end }}

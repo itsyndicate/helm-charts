@@ -5,7 +5,12 @@ metadata:
   labels:
     {{- include "django.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "django.fullname" . }}-env-secrets{{ with .Values.django.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "django.fullname" . }}-env-ext-secrets"
+    {{- $reload := list (printf "%s-env-secrets" (include "django.fullname" .)) }}
+    {{- with .Values.django.env.existingSecretName }}
+    {{- $reload = append $reload . }}
+    {{- end }}
+    {{- $reload = concat $reload (include "django.extSecretNames" . | splitList "," | compact) }}
+    secret.reloader.stakater.com/reload: {{ join ", " $reload | quote }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -87,15 +92,19 @@ spec:
             - secretRef:
                 name: {{ .Values.django.env.existingSecretName }}
             {{- end }}
-            {{- if .Values.django.env.envFromSecretsManager.enabled }}
+            {{- range (include "django.extSecretNames" . | splitList "," | compact) }}
             - secretRef:
-                name: {{ include "django.fullname" . }}-env-ext-secrets
+                name: {{ . }}
             {{- end }}
           {{- if not .Values.nginx.enabled }}
           ports:
             - name: http
               containerPort: {{ .Values.django.port }}
               protocol: TCP
+          {{- end }}
+          {{- with .Values.django.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.django.livenessProbe }}
           livenessProbe:

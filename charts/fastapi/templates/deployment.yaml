@@ -5,7 +5,12 @@ metadata:
   labels:
     {{- include "fastapi.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "fastapi.fullname" . }}-env-secrets{{ with .Values.fastapi.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "fastapi.fullname" . }}-env-ext-secrets"
+    {{- $reload := list (printf "%s-env-secrets" (include "fastapi.fullname" .)) }}
+    {{- with .Values.fastapi.env.existingSecretName }}
+    {{- $reload = append $reload . }}
+    {{- end }}
+    {{- $reload = concat $reload (include "fastapi.extSecretNames" . | splitList "," | compact) }}
+    secret.reloader.stakater.com/reload: {{ join ", " $reload | quote }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -88,15 +93,19 @@ spec:
             - secretRef:
                 name: {{ .Values.fastapi.env.existingSecretName }}
             {{- end }}
-            {{- if .Values.fastapi.env.envFromSecretsManager.enabled }}
+            {{- range (include "fastapi.extSecretNames" . | splitList "," | compact) }}
             - secretRef:
-                name: {{ include "fastapi.fullname" . }}-env-ext-secrets
+                name: {{ . }}
             {{- end }}
           {{- if not .Values.nginx.enabled }}
           ports:
             - name: http
               containerPort: {{ .Values.fastapi.port }}
               protocol: TCP
+          {{- end }}
+          {{- with .Values.fastapi.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- if .Values.fastapi.livenessProbe }}
           livenessProbe:

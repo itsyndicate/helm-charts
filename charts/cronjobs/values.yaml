@@ -62,11 +62,32 @@ env:
   # `envFromSecretsManager` wins over both.
   # @section -- Cron Settings
   existingSecretName: ""
-  # -- Use AWS secrets manager ref. Works with external-secrets operator
+  # -- Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own
+  # ExternalSecret, mounted as env after `existingSecretName`.
   # @section -- Cron Settings
   envFromSecretsManager:
-    enabled: true
-    secretPath: dev/skidochki/env-secrets
+    # -- Render the ExternalSecrets and mount them as env
+    # @section -- Cron Settings
+    enabled: false
+    # -- Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`;
+    # setting both fails the render, and so does setting neither while `enabled` is true.
+    # @section -- Cron Settings
+    secretPath: ""
+    # -- Secret paths mounted in list order. On key collisions a later path wins over an earlier one.
+    # Set either this or `secretPath`.
+    # @section -- Cron Settings
+    secretPaths: []
+    #  - dev/example-com/shared-env
+    #  - dev/example-com/env-secrets
+    # -- Name of the secret store the ExternalSecrets reference
+    # @section -- Cron Settings
+    secretStoreName: global-secret-store
+    # -- Kind of the secret store: ClusterSecretStore or SecretStore
+    # @section -- Cron Settings
+    secretStoreKind: ClusterSecretStore
+    # -- How often External Secrets Operator refreshes the secrets
+    # @section -- Cron Settings
+    refreshInterval: 1m
   # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
   # @section -- Cron Settings
   variables: {}

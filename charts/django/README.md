@@ -1,6 +1,6 @@
 # django
 
-![Version: 0.2.4](https://img.shields.io/badge/Version-0.2.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.27.4](https://img.shields.io/badge/AppVersion-1.27.4-informational?style=flat-square)
+![Version: 0.4.0](https://img.shields.io/badge/Version-0.4.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.27.4](https://img.shields.io/badge/AppVersion-1.27.4-informational?style=flat-square)
 
 ## Values
 
@@ -12,9 +12,16 @@
 | django.args | list | `[]` | Override the default container arguments |
 | django.command | list | `[]` | Override the default container command |
 | django.cronJobs | list | [ ] | Enables cron jobs |
-| django.env | object | `{"envFromSecretsManager":{"enabled":false,"secretPath":"dev/example-com/env-secrets"},"variables":{"DEBUG":"True","PYTHONDONTWRITEBYTECODE":"1","PYTHONUNBUFFERED":"1"}}` | Django environment variables |
-| django.env.envFromSecretsManager | object | `{"enabled":false,"secretPath":"dev/example-com/env-secrets"}` | Use AWS secrets manager ref. Works with external-secrets operator |
-| django.env.variables | object | `{"DEBUG":"True","PYTHONDONTWRITEBYTECODE":"1","PYTHONUNBUFFERED":"1"}` | Extra env variables |
+| django.env | object | `{"envFromSecretsManager":{"enabled":false,"refreshInterval":"1m","secretPath":"","secretPaths":[],"secretStoreKind":"ClusterSecretStore","secretStoreName":"global-secret-store"},"existingSecretName":"","variables":{}}` | Django environment variables |
+| django.env.envFromSecretsManager | object | `{"enabled":false,"refreshInterval":"1m","secretPath":"","secretPaths":[],"secretStoreKind":"ClusterSecretStore","secretStoreName":"global-secret-store"}` | Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own ExternalSecret, mounted as env after `existingSecretName`. |
+| django.env.envFromSecretsManager.enabled | bool | `false` | Render the ExternalSecrets and mount them as env |
+| django.env.envFromSecretsManager.refreshInterval | string | `"1m"` | How often External Secrets Operator refreshes the secrets |
+| django.env.envFromSecretsManager.secretPath | string | `""` | Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`; setting both fails the render, and so does setting neither while `enabled` is true. |
+| django.env.envFromSecretsManager.secretPaths | list | `[]` | Secret paths mounted in list order. On key collisions a later path wins over an earlier one. Set either this or `secretPath`. |
+| django.env.envFromSecretsManager.secretStoreKind | string | `"ClusterSecretStore"` | Kind of the secret store: ClusterSecretStore or SecretStore |
+| django.env.envFromSecretsManager.secretStoreName | string | `"global-secret-store"` | Name of the secret store the ExternalSecrets reference |
+| django.env.existingSecretName | string | `""` | Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator). Mounted additively alongside `variables` and `envFromSecretsManager` on the deployment, workers, cronjobs, and migration job — it does NOT disable `variables`. On key collisions the existing Secret wins over `variables`, and `envFromSecretsManager` wins over both. |
+| django.env.variables | object | `{}` | Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set. |
 | django.image | object | `{"pullPolicy":"IfNotPresent","repository":"django","tag":""}` | Django image settings |
 | django.image.tag | string | `""` | Overrides the image tag whose default is the chart appVersion |
 | django.migrationJob | object | `{"enabled":false}` | Enables migration job before rolling the update |
@@ -22,6 +29,7 @@
 | django.readinessProbe | object | `{}` | Django container readiness probe. Leave empty to use the chart's mode-aware default: a UNIX socket check (ls /tmp/uvicorn.sock) when the NginX sidecar is enabled, or a TCP check on the app port when it is disabled. Set a value here to override the default. |
 | django.resources | object | `{}` | Django container resources |
 | django.securityContext | object | `{}` | Django container security context |
+| django.startupProbe | object | `{}` | Django container startup probe. Not rendered unless set. |
 | django.volumeMounts | list | `[]` | Django container additional volumes mounts |
 | django.volumes | list | `[]` | Django container additional volumes |
 | django.workers | list | [ ] | Enables Django Workers |
@@ -30,7 +38,7 @@
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings. Each path optionally accepts a `backend` field to override the default service backend — see [Per-path custom backend](#per-path-custom-backend). |
+| ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings |
 | service | object | `{"port":80,"type":"ClusterIP"}` | Service settings |
 
 ### NginX Settings
@@ -50,6 +58,12 @@
 | nginx.volumeMounts | list | `[]` | NginX container additional volumes mounts |
 | nginx.volumes | list | `[]` | NginX container additional volumes |
 
+### PDB Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| pdb | object | `{"create":false,"minAvailable":1}` | Pod Disruption Budget settings |
+
 ### Other Values
 
 | Key | Type | Default | Description |
@@ -65,6 +79,7 @@
 | podLabels | object | `{}` | Labels to add to the pod |
 | podSecurityContext | object | `{}` | Security context of the pod |
 | replicaCount | int | `1` | Number of replicas to sping up |
+| revisionHistoryLimit | int | `3` | Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10) |
 | serviceAccount | object | `{"annotations":{},"automount":true,"create":true,"name":""}` | Service Account |
 | serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
 | serviceAccount.automount | bool | `true` | Automatically mount a ServiceAccount's API credentials? |
@@ -96,3 +111,40 @@ ingress:
 ```
 
 If `backend` is omitted on a path, the chart's own service name and port are used — identical behaviour to previous versions.
+
+## Several Secrets Manager paths
+
+`django.env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
+
+```yaml
+django:
+  env:
+    envFromSecretsManager:
+      enabled: true
+      secretStoreName: global-secret-store
+      refreshInterval: 5m
+      secretPaths:
+        - dev/example-com/shared-env
+        - dev/example-com/env-secrets
+```
+
+`secretPath` renders a single ExternalSecret named `<fullname>-env-ext-secrets`, as in previous versions. Set either `secretPath` or `secretPaths`: setting both fails the render, and so does setting neither while `enabled` is true. `secretPath` defaults to empty, so a release that enables Secrets Manager must set one of them.
+
+The migration job mounts its own copy of every path, named `<fullname>-env-migration-ext-secrets-<index>`, so a migration runs against the same values as the app.
+
+## Probes
+
+`django.startupProbe` is rendered only when set. `django.readinessProbe` keeps its mode-aware default: a UNIX socket check when the NginX sidecar is enabled, a TCP check on the app port when it is disabled.
+
+```yaml
+django:
+  startupProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 5
+    failureThreshold: 30
+```
+
+----------------------------------------------
+Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)

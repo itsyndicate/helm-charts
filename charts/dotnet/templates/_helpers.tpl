@@ -60,3 +60,29 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "dotnet.validateSecretsManager" -}}
+{{- $sm := .Values.dotnet.env.envFromSecretsManager -}}
+{{- if and $sm.secretPath $sm.secretPaths -}}
+{{- fail "dotnet.env.envFromSecretsManager: set either secretPath or secretPaths, not both" -}}
+{{- end -}}
+{{- if and $sm.enabled (not $sm.secretPath) (not $sm.secretPaths) -}}
+{{- fail "dotnet.env.envFromSecretsManager.enabled is true: set secretPath or secretPaths" -}}
+{{- end -}}
+{{- end }}
+
+{{- define "dotnet.extSecretNames" -}}
+{{- $fullname := include "dotnet.fullname" . -}}
+{{- $sm := .Values.dotnet.env.envFromSecretsManager -}}
+{{- $names := list -}}
+{{- if $sm.enabled -}}
+{{- if $sm.secretPaths -}}
+{{- range $i, $path := $sm.secretPaths -}}
+{{- $names = append $names (printf "%s-env-ext-secrets-%d" $fullname $i) -}}
+{{- end -}}
+{{- else -}}
+{{- $names = append $names (printf "%s-env-ext-secrets" $fullname) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end }}

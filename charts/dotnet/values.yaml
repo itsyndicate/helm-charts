@@ -60,20 +60,27 @@ dotnet:
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
-  # -- Dotnet APP container liveness probe
+  # -- Dotnet APP container startup probe. Not rendered unless set.
   # @section -- Dotnet APP Settings
-  #  livenessProbe:
-  #    httpGet:
-  #      path: /
-  #      port: http
-  # -- Dotnet APP container readiness probe
+  startupProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
+  #  periodSeconds: 5
+  #  failureThreshold: 30
+  # -- Dotnet APP container readiness probe. Not rendered unless set.
   # @section -- Dotnet APP Settings
-  #  readinessProbe:
-  #      httpGet:
-  #        path: /
-  #        port: http
-  #    initialDelaySeconds: 5
-  #    periodSeconds: 5
+  readinessProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
+  #  periodSeconds: 10
+  # -- Dotnet APP container liveness probe. Not rendered unless set.
+  # @section -- Dotnet APP Settings
+  livenessProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
   # -- Dotnet APP container additional volumes
   # @section -- Dotnet APP Settings
   volumes: [ ]
@@ -101,11 +108,32 @@ dotnet:
     # `envFromSecretsManager` wins over both.
     # @section -- Dotnet APP Settings
     existingSecretName: ""
-    # -- Use AWS secrets manager ref. Works with external-secrets operator
+    # -- Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own
+    # ExternalSecret, mounted as env after `existingSecretName`.
     # @section -- Dotnet APP Settings
     envFromSecretsManager:
+      # -- Render the ExternalSecrets and mount them as env
+      # @section -- Dotnet APP Settings
       enabled: false
-      secretPath: dev/example-com/env-secrets
+      # -- Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`;
+      # setting both fails the render, and so does setting neither while `enabled` is true.
+      # @section -- Dotnet APP Settings
+      secretPath: ""
+      # -- Secret paths mounted in list order. On key collisions a later path wins over an earlier one.
+      # Set either this or `secretPath`.
+      # @section -- Dotnet APP Settings
+      secretPaths: []
+      #  - dev/example-com/shared-env
+      #  - dev/example-com/env-secrets
+      # -- Name of the secret store the ExternalSecrets reference
+      # @section -- Dotnet APP Settings
+      secretStoreName: global-secret-store
+      # -- Kind of the secret store: ClusterSecretStore or SecretStore
+      # @section -- Dotnet APP Settings
+      secretStoreKind: ClusterSecretStore
+      # -- How often External Secrets Operator refreshes the secrets
+      # @section -- Dotnet APP Settings
+      refreshInterval: 1m
     # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
     # @section -- Dotnet APP Settings
     variables: {}
