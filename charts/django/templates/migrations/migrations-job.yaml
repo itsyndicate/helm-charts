@@ -42,9 +42,9 @@ spec:
             - secretRef:
                 name: {{ .Values.django.env.existingSecretName }}
             {{- end }}
-            {{- if .Values.django.env.envFromSecretsManager.enabled }}
+            {{- range (include "django.migrationExtSecretNames" . | splitList "," | compact) }}
             - secretRef:
-                name: {{ include "django.fullname" . }}-env-migration-ext-secrets
+                name: {{ . }}
             {{- end }}
           command: [ "/bin/bash", "-c" ]
           args:

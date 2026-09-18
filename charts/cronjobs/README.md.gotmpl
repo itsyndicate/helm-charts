@@ -1,0 +1,28 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.valuesSection" . }}
+
+## Several Secrets Manager paths
+
+`env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
+
+```yaml
+env:
+  envFromSecretsManager:
+    enabled: true
+    secretStoreName: global-secret-store
+    refreshInterval: 5m
+    secretPaths:
+      - dev/example-com/shared-env
+      - dev/example-com/env-secrets
+```
+
+`secretPath` renders a single ExternalSecret named `<fullname>-env-ext-secrets`, as in previous versions. Set either `secretPath` or `secretPaths`: setting both fails the render, and so does setting neither while `enabled` is true. `secretPath` defaults to empty, so a release that enables Secrets Manager must set one of them.
+
+`enabled` now defaults to `false` and `secretPath` to empty. Earlier versions shipped `enabled: true` with a default path, so a release that mounted Secrets Manager through the chart defaults alone must now set `enabled` and one of the two path settings itself.
+
+{{ template "helm-docs.versionFooter" . }}

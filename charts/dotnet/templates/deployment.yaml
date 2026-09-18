@@ -5,7 +5,12 @@ metadata:
   labels:
     {{- include "dotnet.labels" . | nindent 4 }}
   annotations:
-    secret.reloader.stakater.com/reload: "{{ include "dotnet.fullname" . }}-env-secrets{{ with .Values.dotnet.env.existingSecretName }}, {{ . }}{{ end }}, {{ include "dotnet.fullname" . }}-env-ext-secrets"
+    {{- $reload := list (printf "%s-env-secrets" (include "dotnet.fullname" .)) }}
+    {{- with .Values.dotnet.env.existingSecretName }}
+    {{- $reload = append $reload . }}
+    {{- end }}
+    {{- $reload = concat $reload (include "dotnet.extSecretNames" . | splitList "," | compact) }}
+    secret.reloader.stakater.com/reload: {{ join ", " $reload | quote }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -48,9 +53,9 @@ spec:
             - secretRef:
                 name: {{ .Values.dotnet.env.existingSecretName }}
             {{- end }}
-            {{- if .Values.dotnet.env.envFromSecretsManager.enabled }}
+            {{- range (include "dotnet.extSecretNames" . | splitList "," | compact) }}
             - secretRef:
-                name: {{ include "dotnet.fullname" . }}-env-ext-secrets
+                name: {{ . }}
             {{- end }}
           ports:
             - name: {{ .Values.dotnet.port.name | default "http" }}
@@ -63,10 +68,18 @@ spec:
               protocol: {{ .protocol | default "TCP" }}
           {{- end }}
           {{- end }}
-          livenessProbe:
-            {{- toYaml .Values.dotnet.livenessProbe | nindent 12 }}
+          {{- with .Values.dotnet.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.dotnet.readinessProbe }}
           readinessProbe:
-            {{- toYaml .Values.dotnet.readinessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.dotnet.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.dotnet.resources | nindent 12 }}
           {{- with .Values.dotnet.volumeMounts }}

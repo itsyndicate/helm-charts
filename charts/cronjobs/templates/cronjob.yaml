@@ -1,7 +1,7 @@
 {{- range $cron := $.Values.cronJobs }}
-{{- if $cron.enabled -}}
+{{- if $cron.enabled }}
 ---
-{{- $cronName := $cron.name | replace "_" "-" -}}
+{{- $cronName := $cron.name | replace "_" "-" }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -39,9 +39,9 @@ spec:
                 - secretRef:
                     name: {{ $.Values.env.existingSecretName }}
                 {{- end }}
-                {{- if $.Values.env.envFromSecretsManager.enabled }}
+                {{- range (include "cronjobs.extSecretNames" $ | splitList "," | compact) }}
                 - secretRef:
-                    name: {{ include "cronjobs.fullname" $ }}-env-ext-secrets
+                    name: {{ . }}
                 {{- end }}
               volumeMounts:
                 {{- with $cron.extraVolumeMounts }}

@@ -150,6 +150,14 @@ django:
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
+  # -- Django container startup probe. Not rendered unless set.
+  # @section -- Django Settings
+  startupProbe: {}
+  #  httpGet:
+  #    path: /
+  #    port: http
+  #  periodSeconds: 5
+  #  failureThreshold: 30
   # -- Django container liveness probe
   # @section -- Django Settings
   #  livenessProbe:
@@ -187,11 +195,32 @@ django:
     # Secret wins over `variables`, and `envFromSecretsManager` wins over both.
     # @section -- Django Settings
     existingSecretName: ""
-    # -- Use AWS secrets manager ref. Works with external-secrets operator
+    # -- Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own
+    # ExternalSecret, mounted as env after `existingSecretName`.
     # @section -- Django Settings
     envFromSecretsManager:
+      # -- Render the ExternalSecrets and mount them as env
+      # @section -- Django Settings
       enabled: false
-      secretPath: dev/example-com/env-secrets
+      # -- Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`;
+      # setting both fails the render, and so does setting neither while `enabled` is true.
+      # @section -- Django Settings
+      secretPath: ""
+      # -- Secret paths mounted in list order. On key collisions a later path wins over an earlier one.
+      # Set either this or `secretPath`.
+      # @section -- Django Settings
+      secretPaths: []
+      #  - dev/example-com/shared-env
+      #  - dev/example-com/env-secrets
+      # -- Name of the secret store the ExternalSecrets reference
+      # @section -- Django Settings
+      secretStoreName: global-secret-store
+      # -- Kind of the secret store: ClusterSecretStore or SecretStore
+      # @section -- Django Settings
+      secretStoreKind: ClusterSecretStore
+      # -- How often External Secrets Operator refreshes the secrets
+      # @section -- Django Settings
+      refreshInterval: 1m
     # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
     # @section -- Django Settings
     variables: {}

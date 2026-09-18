@@ -1,7 +1,7 @@
 {{- range $cron := $.Values.django.cronJobs }}
-{{- if $cron.enabled -}}
+{{- if $cron.enabled }}
 ---
-{{- $cronName := $cron.name | replace "_" "-" -}}
+{{- $cronName := $cron.name | replace "_" "-" }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -37,9 +37,9 @@ spec:
                 - secretRef:
                     name: {{ $.Values.django.env.existingSecretName }}
                 {{- end }}
-                {{- if $.Values.django.env.envFromSecretsManager.enabled }}
+                {{- range (include "django.extSecretNames" $ | splitList "," | compact) }}
                 - secretRef:
-                    name: {{ include "django.fullname" $ }}-env-ext-secrets
+                    name: {{ . }}
                 {{- end }}
               volumeMounts:
                 {{- with $cron.extraVolumeMounts }}

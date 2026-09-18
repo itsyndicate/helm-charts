@@ -1,6 +1,6 @@
 # fastapi
 
-![Version: 0.3.4](https://img.shields.io/badge/Version-0.3.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
+![Version: 0.5.0](https://img.shields.io/badge/Version-0.5.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.16.0](https://img.shields.io/badge/AppVersion-1.16.0-informational?style=flat-square)
 
 A Helm chart for Kubernetes
 
@@ -13,8 +13,15 @@ A Helm chart for Kubernetes
 | fastapi | object | A complex object. Please check values below | FastAPI-specific configurations |
 | fastapi.args | list | `[]` | Override the default container arguments |
 | fastapi.command | list | `[]` | Override the default container command |
-| fastapi.env.envFromSecretsManager | object | `{"enabled":false,"secretPath":"path/to/secret"}` | Use AWS secrets manager ref. Works with external-secrets operator |
-| fastapi.env.variables | object | `{}` | Key-value pairs of environment variables (will be base64 encoded in the secret) |
+| fastapi.env.envFromSecretsManager | object | `{"enabled":false,"refreshInterval":"1m","secretPath":"","secretPaths":[],"secretStoreKind":"ClusterSecretStore","secretStoreName":"global-secret-store"}` | Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own ExternalSecret, mounted as env after `existingSecretName`. |
+| fastapi.env.envFromSecretsManager.enabled | bool | `false` | Render the ExternalSecrets and mount them as env |
+| fastapi.env.envFromSecretsManager.refreshInterval | string | `"1m"` | How often External Secrets Operator refreshes the secrets |
+| fastapi.env.envFromSecretsManager.secretPath | string | `""` | Single secret path, e.g. `dev/example-com/env-secrets`. Set either this or `secretPaths`; setting both fails the render, and so does setting neither while `enabled` is true. |
+| fastapi.env.envFromSecretsManager.secretPaths | list | `[]` | Secret paths mounted in list order. On key collisions a later path wins over an earlier one. Set either this or `secretPath`. |
+| fastapi.env.envFromSecretsManager.secretStoreKind | string | `"ClusterSecretStore"` | Kind of the secret store: ClusterSecretStore or SecretStore |
+| fastapi.env.envFromSecretsManager.secretStoreName | string | `"global-secret-store"` | Name of the secret store the ExternalSecrets reference |
+| fastapi.env.existingSecretName | string | `""` | Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator). Mounted additively alongside `variables` and `envFromSecretsManager` on the deployment and workers — it does NOT disable `variables`. On key collisions the existing Secret wins over `variables`, and `envFromSecretsManager` wins over both. |
+| fastapi.env.variables | object | `{}` | Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set. |
 | fastapi.image | object | `{"pullPolicy":"IfNotPresent","repository":"my-fastapi-image","tag":"latest"}` | FastAPI image settings |
 | fastapi.image.tag | string | `"latest"` | Tag of the FastAPI image |
 | fastapi.livenessProbe | object | `{}` | Liveness probe for FastAPI. Leave empty to use the chart's mode-aware default: no liveness probe when the NginX sidecar is enabled (app on a UNIX socket), or an HTTP check on /health at the app port when it is disabled. Set a value here to override. |
@@ -22,6 +29,7 @@ A Helm chart for Kubernetes
 | fastapi.readinessProbe | object | `{}` | Readiness probe for FastAPI. Leave empty to use the chart's mode-aware default: a UNIX socket check (ls /tmp/uvicorn.sock) when the NginX sidecar is enabled, or an HTTP check on /health at the app port when it is disabled. Set a value here to override. |
 | fastapi.resources | object | `{}` | Resource limits and requests for the FastAPI container |
 | fastapi.securityContext | object | `{}` | Security context for the FastAPI container |
+| fastapi.startupProbe | object | `{}` | Startup probe for FastAPI. Not rendered unless set. |
 | fastapi.volumeMounts | list | `[]` | Additional volume mounts for FastAPI container |
 | fastapi.volumes | list | `[]` | Additional volumes for FastAPI pods |
 | fastapi.workers | list | `[]` | Configuration for FastAPI workers |
@@ -30,7 +38,7 @@ A Helm chart for Kubernetes
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings. Each path optionally accepts a `backend` field to override the default service backend — see [Per-path custom backend](#per-path-custom-backend). |
+| ingress | object | `{"annotations":{},"className":"","enabled":false,"hosts":[{"host":"chart-example.local","paths":[{"path":"/","pathType":"ImplementationSpecific"}]}],"tls":[]}` | Ingress settings |
 | service | object | `{"port":80,"type":"ClusterIP"}` | Service configuration |
 
 ### NginX Settings
@@ -48,14 +56,18 @@ A Helm chart for Kubernetes
 | nginx.volumeMounts | list | `[]` | Additional volume mounts for the NginX container |
 | nginx.volumes | list | `[]` | Additional volumes for the NginX pods |
 
+### PDB Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| pdb | object | `{"create":false,"minAvailable":1}` | Pod Disruption Budget settings |
+
 ### Other Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` | Affinity rules for pod placement |
 | autoscaling | object | `{"enabled":false,"maxReplicas":100,"minReplicas":1,"targetCPUUtilizationPercentage":80}` | Autoscaling configuration |
-| fastapi.env.envFromSecretsManager.enabled | bool | `false` | Enable fetching secrets from an external secrets manager (e.g., AWS) |
-| fastapi.env.envFromSecretsManager.secretPath | string | `"path/to/secret"` | Path to the secret in the external secrets manager |
 | fastapi.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy (Always, IfNotPresent, Never) |
 | fastapi.image.repository | string | `"my-fastapi-image"` | FastAPI Docker image repository |
 | fullnameOverride | string | `""` | Overrides full release name |
@@ -70,6 +82,7 @@ A Helm chart for Kubernetes
 | podLabels | object | `{}` | Labels to add to the pods |
 | podSecurityContext | object | `{}` | Security context for the pod |
 | replicaCount | int | `1` | Number of replicas to spin up |
+| revisionHistoryLimit | int | `3` | Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10) |
 | service.port | int | `80` | Port exposed by the service |
 | service.type | string | `"ClusterIP"` | Type of Kubernetes service (ClusterIP, NodePort, LoadBalancer) |
 | serviceAccount | object | `{"annotations":{},"automount":true,"create":true,"name":""}` | Service Account configuration |
@@ -103,6 +116,38 @@ ingress:
 ```
 
 If `backend` is omitted on a path, the chart's own service name and port are used — identical behaviour to previous versions.
+
+## Several Secrets Manager paths
+
+`fastapi.env.envFromSecretsManager.secretPaths` renders one ExternalSecret per path, named `<fullname>-env-ext-secrets-<index>`, and mounts them with `envFrom` in list order after `existingSecretName`. Kubernetes gives the last `envFrom` source precedence for a duplicate key, so a later path overrides an earlier one. This lets a release take shared defaults from one secret and override some of them from another.
+
+```yaml
+fastapi:
+  env:
+    envFromSecretsManager:
+      enabled: true
+      secretStoreName: global-secret-store
+      refreshInterval: 5m
+      secretPaths:
+        - dev/example-com/shared-env
+        - dev/example-com/env-secrets
+```
+
+`secretPath` renders a single ExternalSecret named `<fullname>-env-ext-secrets`, as in previous versions. Set either `secretPath` or `secretPaths`: setting both fails the render, and so does setting neither while `enabled` is true. `secretPath` defaults to empty, so a release that enables Secrets Manager must set one of them.
+
+## Probes
+
+`fastapi.startupProbe` is rendered only when set. The mode-aware liveness and readiness defaults are unchanged: with the NginX sidecar enabled the app container gets no liveness probe and a UNIX socket readiness check, and with it disabled both are HTTP checks on `/health` at the app port.
+
+```yaml
+fastapi:
+  startupProbe:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 5
+    failureThreshold: 30
+```
 
 ----------------------------------------------
 Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)
