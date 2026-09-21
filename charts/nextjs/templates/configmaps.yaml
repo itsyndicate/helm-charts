@@ -6,6 +6,9 @@ metadata:
   name: {{ include "nextjs.fullname" . }}-nginx-conf
 data:
   nginx.conf: |
+    {{- if .Values.nginx.config }}
+    {{- tpl .Values.nginx.config . | nindent 4 }}
+    {{- else }}
     user  nginx;
     worker_processes  auto;
 
@@ -117,4 +120,5 @@ data:
         '' close;
       }
     }
+    {{- end }}
 {{- end }}
