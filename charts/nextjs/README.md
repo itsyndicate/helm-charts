@@ -165,13 +165,14 @@ nginx:
       server {
         listen {{ .Values.service.port }};
         location / {
-          proxy_pass http://localhost:{{ .Values.nextjs.port }};
+          proxy_pass http://127.0.0.1:{{ .Values.nextjs.port }};
         }
       }
     }
 ```
 
-- **The Service targets the sidecar's `nginx` port, and nginx proxies to the Next.js container in the same pod** over `localhost`. The chart sets the `nginx` container port to `service.port`, so the config must `listen` on that number.
+- **The Service targets the sidecar's `nginx` port, and nginx proxies to the Next.js container in the same pod** over the loopback address. The chart sets the `nginx` container port to `service.port`, so the config must `listen` on that number.
+- **Write `127.0.0.1`, not `localhost`.** In the official image `localhost` also resolves to `::1`, so nginx builds two upstream servers. A Next.js standalone server started with `HOSTNAME=0.0.0.0` listens on IPv4 only, and nginx logs `connect() failed (111: Connection refused)` for `[::1]` before retrying on `127.0.0.1`.
 - **Don't include `/etc/nginx/conf.d/*.conf`.** The official `nginx` image ships `conf.d/default.conf`, a server on port 80. If the container runs as non-root with capabilities dropped, nginx can't bind port 80 and exits at startup. As root, that server can take requests meant for your own server block.
 - **The four timeout keys** (`keepalive_timeout`, `proxy_read_timeout`, `proxy_send_timeout`, `send_timeout`) apply only where your config references them.
 - **A config change rolls the pods.** The file is mounted with `subPath`, and a `subPath` mount never receives ConfigMap updates. So when `nginx.config` is set, the pod template carries a `checksum/nginx-config` annotation of the rendered config.

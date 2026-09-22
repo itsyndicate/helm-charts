@@ -102,6 +102,9 @@ nginx:
   # -- Timeout for transmitting a response to the client
   # @section -- NginX Settings
   send_timeout: 60s
+  # -- Whole `nginx.conf`, rendered through `tpl`, so it may reference any value, e.g. `{{ .Values.nginx.send_timeout }}`. When set, it replaces the built-in config and the four timeout keys above apply only where it references them. It must not include `/etc/nginx/conf.d/*.conf` — see [Custom nginx.conf](#custom-nginxconf).
+  # @section -- NginX Settings
+  config: ""
 
 # -- Django Specific Configurations
 # @section -- Django Settings

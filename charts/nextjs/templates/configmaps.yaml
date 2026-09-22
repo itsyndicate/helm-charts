@@ -6,7 +6,7 @@ metadata:
   name: {{ include "nextjs.fullname" . }}-nginx-conf
 data:
   nginx.conf: |
-    {{- if .Values.nginx.config }}
+    {{- if .Values.nginx.config | default "" | trim }}
     {{- tpl .Values.nginx.config . | nindent 4 }}
     {{- else }}
     user  nginx;

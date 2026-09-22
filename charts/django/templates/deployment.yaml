@@ -23,9 +23,16 @@ spec:
       {{- include "django.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- $nginxConfig := and .Values.nginx.enabled (.Values.nginx.config | default "" | trim) }}
+      {{- if or .Values.podAnnotations $nginxConfig }}
       annotations:
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if $nginxConfig }}
+        {{- /* nginx.conf is mounted with subPath, which never sees a ConfigMap update: roll the pods instead */}}
+        checksum/nginx-config: {{ tpl .Values.nginx.config . | sha256sum }}
+        {{- end }}
       {{- end }}
       labels:
         {{- include "django.labels" . | nindent 8 }}

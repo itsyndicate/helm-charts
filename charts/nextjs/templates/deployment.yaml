@@ -23,7 +23,7 @@ spec:
       {{- include "nextjs.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- $nginxConfig := and .Values.nginx.enabled .Values.nginx.config }}
+      {{- $nginxConfig := and .Values.nginx.enabled (.Values.nginx.config | default "" | trim) }}
       {{- if or .Values.podAnnotations $nginxConfig }}
       annotations:
         {{- with .Values.podAnnotations }}
