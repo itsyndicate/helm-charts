@@ -64,6 +64,16 @@ entries:
   django:
   - apiVersion: v2
     appVersion: 1.27.4
+    created: "2026-09-22T00:23:42.083679378Z"
+    description: A Helm chart for Kubernetes
+    digest: 03935b3174e1660141e7a58f0ff73c24fcb13f79068bc9431c5b878a8a64088d
+    name: django
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/django-0.5.0/django-0.5.0.tgz
+    version: 0.5.0
+  - apiVersion: v2
+    appVersion: 1.27.4
     created: "2026-09-18T23:26:56.272963209Z"
     description: A Helm chart for Kubernetes
     digest: 67c3e87c9a01d6b19d93df6123d4e9effd00800d142a3d89ad509931d15e2124
@@ -206,6 +216,16 @@ entries:
   fastapi:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-09-22T00:23:42.278886795Z"
+    description: A Helm chart for Kubernetes
+    digest: c681baa88cd76a1c9fda8631299fc5ccfe86f01c321cbf41b86f1ff6291dd301
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.6.0/fastapi-0.6.0.tgz
+    version: 0.6.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-09-18T23:26:56.505532439Z"
     description: A Helm chart for Kubernetes
     digest: 954cfbb7692f3e8cf81963685970d8c16f63da3c050fccb449ae3f448fe76f6f
@@ -335,6 +355,16 @@ entries:
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-09-22T00:23:42.438366384Z"
+    description: A Helm chart for Kubernetes
+    digest: 88ed2a246e57d8864cb681f395f88e3f0488353fccbb13b240fe714599f84f16
+    name: nextjs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.7.0/nextjs-0.7.0.tgz
+    version: 0.7.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-09-17T02:06:19.783112694Z"
     description: A Helm chart for Kubernetes
     digest: b11da50bc9bf5d4aab0c3e49053c954a54d4ce3e0334b5aac74377921fa39341
@@ -423,4 +453,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-18T23:26:56.505653764Z"
+generated: "2026-09-22T00:23:42.438486478Z"
