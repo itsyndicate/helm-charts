@@ -92,3 +92,31 @@ fastapi:
 - **A config change rolls the pods.** The file is mounted with `subPath`, and a `subPath` mount never receives ConfigMap updates. So when `nginx.config` is set, the Deployment's pod template carries a `checksum/nginx-config` annotation of the rendered config.
 
 {{ template "helm-docs.versionFooter" . }}
+
+## Pre-deploy job
+
+`fastapi.preDeployJob` runs one Job before every install and upgrade, for example a database migration. It is a Helm `pre-install,pre-upgrade` hook, so Argo CD runs it as a PreSync hook. The Job uses the release image and the chart's ServiceAccount, and it receives the same environment as the application: `env.variables`, `existingSecretName` and every `envFromSecretsManager` path.
+
+```yaml
+fastapi:
+  preDeployJob:
+    enabled: true
+    command: ["alembic"]
+    args: ["upgrade", "head"]
+```
+
+Do not enable the Job on the first install of a release. The ExternalSecrets and the Secrets they create are ordinary resources, and they do not exist yet when the hook runs. Install the release with the Job disabled, then enable it.
+
+## Component labels
+
+The chart adds `app.kubernetes.io/component` to every pod it creates:
+
+| Pod | Label value |
+|---|---|
+| The application Deployment | `web` |
+| A worker from `fastapi.workers[]` | `worker-<name>` |
+| The pre-deploy Job | `pre-deploy-job` |
+
+The Service selects `app.kubernetes.io/component: web`, so it sends traffic to application pods only. Before 0.7.0 the Service also selected worker pods.
+
+**Upgrading from 0.6.x.** The Service selector changes before the new application pods are ready. The Service has no endpoints until the first new pod passes its readiness probe. The Deployment selectors do not change.

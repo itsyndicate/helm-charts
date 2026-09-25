@@ -1,0 +1,82 @@
+{{- if .Values.fastapi.preDeployJob.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "fastapi.fullname" . }}-pre-deploy
+  labels:
+    app.kubernetes.io/component: pre-deploy-job
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.fastapi.preDeployJob.backoffLimit }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "fastapi.labels" . | nindent 8 }}
+        app.kubernetes.io/component: pre-deploy-job
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "fastapi.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.fastapi.securityContext | nindent 12 }}
+          image: "{{ .Values.fastapi.image.repository }}:{{ .Values.fastapi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.fastapi.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ include "fastapi.fullname" . }}-env-pre-deploy-secrets
+            {{- if .Values.fastapi.env.existingSecretName }}
+            - secretRef:
+                name: {{ .Values.fastapi.env.existingSecretName }}
+            {{- end }}
+            {{- range (include "fastapi.extSecretNames" . | splitList "," | compact) }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+          {{- with .Values.fastapi.preDeployJob.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.fastapi.preDeployJob.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.fastapi.resources | nindent 12 }}
+          {{- with .Values.fastapi.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.fastapi.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+{{- end -}}
