@@ -36,6 +36,7 @@ spec:
       {{- end }}
       labels:
         {{- include "fastapi.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

@@ -151,6 +151,23 @@ fastapi:
   # @section -- FastAPI Settings
   volumes: []
 
+  # -- Enables pre-deploy job with Helm hook before rolling the update
+  # @section -- FastAPI Settings
+  preDeployJob:
+    enabled: false
+    # -- Number of retries before marking the job as failed
+    # @section -- FastAPI Settings
+    backoffLimit: 6
+    # -- Command to run in the job container
+    # @section -- FastAPI Settings
+    command: []
+    #  - alembic
+    # -- Arguments to pass to the command
+    # @section -- FastAPI Settings
+    args: []
+    #  - upgrade
+    #  - head
+
   # -- Configuration for FastAPI workers
   # @section -- FastAPI Settings
   workers: []
