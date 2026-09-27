@@ -1,5 +1,5 @@
 {{- range $worker := $.Values.fastapi.workers }}
-{{- if $worker.enabled -}}
+{{- if $worker.enabled }}
 ---
 apiVersion: apps/v1
 kind: Deployment
