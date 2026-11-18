@@ -300,7 +300,12 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
+  # Average CPU per pod as an absolute value. When set, it is used instead of targetCPUUtilizationPercentage,
+  # so the scaling threshold does not depend on resources.requests.cpu
+  # targetCPUAverageValue: 300m
   # targetMemoryUtilizationPercentage: 80
+  # Average memory per pod as an absolute value. When set, it is used instead of targetMemoryUtilizationPercentage
+  # targetMemoryAverageValue: 1Gi
 
 # -- Pod Disruption Budget settings
 # @section -- PDB Settings
