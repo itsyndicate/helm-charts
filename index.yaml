@@ -64,6 +64,16 @@ entries:
   django:
   - apiVersion: v2
     appVersion: 1.27.4
+    created: "2026-11-19T09:28:17.25792662Z"
+    description: A Helm chart for Kubernetes
+    digest: 880395f9cc7b36dfee54e540c8661b3a14faa7c80a448ddbbce5489eab719b05
+    name: django
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/django-0.6.0/django-0.6.0.tgz
+    version: 0.6.0
+  - apiVersion: v2
+    appVersion: 1.27.4
     created: "2026-09-27T16:05:04.089151396Z"
     description: A Helm chart for Kubernetes
     digest: 80dff3b86c9c7043c6f6c08c5c12ea9a40cea768a52675a6a60ce5d3e7031f87
@@ -165,6 +175,16 @@ entries:
   dotnet:
   - apiVersion: v2
     appVersion: 0.0.1
+    created: "2026-11-19T09:28:17.563722678Z"
+    description: A Helm chart for Kubernetes
+    digest: e9c84c62fdb84d460ce090ef94bb8281d1d93a0fb9bfcc888d9236c8666c0af5
+    name: dotnet
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.4.0/dotnet-0.4.0.tgz
+    version: 0.4.0
+  - apiVersion: v2
+    appVersion: 0.0.1
     created: "2026-09-18T23:26:56.378083678Z"
     description: A Helm chart for Kubernetes
     digest: c95d469c178532039c54ad59933cf7c5efd340b11fa94e602c849993313e9651
@@ -224,6 +244,16 @@ entries:
     - https://github.com/itsyndicate/helm-charts/releases/download/dotnet-0.0.1/dotnet-0.0.1.tgz
     version: 0.0.1
   fastapi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-11-19T09:28:17.802970944Z"
+    description: A Helm chart for Kubernetes
+    digest: 066d0d00d8a74c76623ad3fe4773488fef14e841b0abad8e1037a921169e1aa3
+    name: fastapi
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/fastapi-0.8.0/fastapi-0.8.0.tgz
+    version: 0.8.0
   - apiVersion: v2
     appVersion: 1.16.0
     created: "2026-09-27T16:05:04.346862001Z"
@@ -385,6 +415,16 @@ entries:
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2026-11-19T09:28:18.057652617Z"
+    description: A Helm chart for Kubernetes
+    digest: 7b829e075d260dab698d2295909b8f4a771874a33dbc09916f2197d34b283380
+    name: nextjs
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.8.0/nextjs-0.8.0.tgz
+    version: 0.8.0
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2026-09-22T00:23:42.438366384Z"
     description: A Helm chart for Kubernetes
     digest: 88ed2a246e57d8864cb681f395f88e3f0488353fccbb13b240fe714599f84f16
@@ -483,4 +523,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-27T16:05:04.347126126Z"
+generated: "2026-11-19T09:28:18.05775591Z"
