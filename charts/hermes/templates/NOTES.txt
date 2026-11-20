@@ -1,0 +1,24 @@
+Hermes Agent runs as a single pod ({{ include "hermes.fullname" . }}), HERMES_HOME={{ .Values.hermes.home }}
+{{- if .Values.persistence.enabled }} on PVC {{ include "hermes.pvcName" . }}{{ else }} WITHOUT persistence: all state is lost on restart{{ end }}.
+
+API (OpenAI-compatible, bearer API_SERVER_KEY):
+{{- if .Values.ingress.api.enabled }}
+{{- range .Values.ingress.api.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else }}
+  http://{{ include "hermes.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.hermes.api.port }}
+{{- end }}
+{{- if .Values.hermes.dashboard.enabled }}
+
+Dashboard (basic auth):
+{{- if .Values.ingress.dashboard.enabled }}
+{{- range .Values.ingress.dashboard.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "hermes.fullname" . }} {{ .Values.hermes.dashboard.port }}
+{{- end }}
+{{- end }}
+
+On a new volume, set the model, provider and database mode once (see the chart README, "First start").

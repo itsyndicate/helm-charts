@@ -1,0 +1,80 @@
+{{ template "chart.header" . }}
+{{ template "chart.description" . }}
+
+{{ template "chart.badgesSection" . }}
+
+## Why one pod
+
+Hermes Agent keeps all its state (chats, memory, skills, config.yaml) in `HERMES_HOME`, in several SQLite databases. SQLite allows one writer, so the chart always runs exactly one pod with the `Recreate` strategy: the old pod stops before the new one starts, and the `ReadWriteOnce` volume is never mounted twice. That is also why there is no `replicaCount`, HPA or PodDisruptionBudget. A deploy or a node drain means a short downtime.
+
+The PVC is kept on `helm uninstall` (`persistence.keepOnUninstall`), so the agent data is not lost by accident. Delete it by hand when it is really not needed.
+
+## Image
+
+`hermes.image.digest` takes precedence over `hermes.image.tag`, so a pipeline can deploy exactly the image it pushed:
+
+```yaml
+hermes:
+  image:
+    repository: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/hermes-agent
+    digest: sha256:0123...
+```
+
+The container must keep the image entrypoint: the official image starts s6-overlay, which runs the gateway and the dashboard and only works as PID 1. Do not override `hermes.command`.
+
+## Secrets
+
+`API_SERVER_KEY` (the bearer key of the API), the LLM provider keys and, with the dashboard, `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` have to come from a secret, usually from AWS Secrets Manager through External Secrets:
+
+```yaml
+hermes:
+  env:
+    envFromSecretsManager:
+      enabled: true
+      secretPath: myapp/staging/hermes_env_vars
+```
+
+The chart sets `HERMES_HOME`, `API_SERVER_ENABLED`, `API_SERVER_HOST`, `API_SERVER_PORT` and the dashboard variables itself.
+
+## Ingress
+
+The API and the dashboard have separate ingresses, so they can get different hosts, load balancers or access rules. Anyone with `API_SERVER_KEY` can make the agent run shell commands, so put the API behind an access layer (for example Cloudflare Access with a service token) and keep the dashboard internal. Example for the AWS Load Balancer Controller:
+
+```yaml
+ingress:
+  api:
+    enabled: true
+    className: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /health
+    hosts:
+      - host: hermes-api.example.com
+        paths:
+          - path: /v1
+            pathType: Prefix
+          - path: /api/sessions
+            pathType: Prefix
+          - path: /health
+            pathType: Exact
+```
+
+## First start
+
+On a new volume the image creates `config.yaml` with its example values (model `anthropic/claude-opus-4.6`, provider `auto`, an OpenRouter `base_url`). The model and provider are read only from `config.yaml`, so set them once in the running pod, as the `hermes` user so the file keeps its owner, and restart the pod:
+
+```bash
+kubectl -n <namespace> exec deploy/<fullname> -- su hermes -s /bin/sh -c '
+  export HERMES_HOME=/opt/data; H=/opt/hermes/bin/hermes
+  $H config set model.provider anthropic
+  $H config set model.default <model>
+  $H config set model.base_url https://api.anthropic.com'
+kubectl -n <namespace> rollout restart deploy/<fullname>
+```
+
+`config.yaml` stays on the volume, so later deploys keep these settings. On EBS (`ReadWriteOnce`) SQLite can stay in its default WAL mode. On NFS-based storage such as EFS also set `database.journal_mode delete` before the databases are created.
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: hermes
+description: Hermes Agent (Nous Research) as a single stateful pod with a persistent HERMES_HOME
+type: application
+# Chart version, Semantic Versioning. Increment it on every change to the chart.
+version: 0.1.0
+# Hermes Agent release the default values were written for. The image tag itself is set per release.
+appVersion: "v0.23.1"

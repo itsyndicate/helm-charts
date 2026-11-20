@@ -1,0 +1,7 @@
+{{- if .Values.ingress.api.enabled }}
+{{ include "hermes.ingress" (dict "ctx" $ "name" "api" "cfg" .Values.ingress.api "port" "api") }}
+{{- end }}
+{{- if and .Values.ingress.dashboard.enabled .Values.hermes.dashboard.enabled }}
+---
+{{ include "hermes.ingress" (dict "ctx" $ "name" "dashboard" "cfg" .Values.ingress.dashboard "port" "dashboard") }}
+{{- end }}

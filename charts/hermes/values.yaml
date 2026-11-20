@@ -1,0 +1,208 @@
+# -- Old ReplicaSets retained for rollback (set null to fall back to the Kubernetes default of 10)
+revisionHistoryLimit: 3
+# -- Secret that used to store docker registry credentials
+imagePullSecrets: []
+# -- Overrides release name
+nameOverride: ""
+# -- Overrides full release name
+fullnameOverride: ""
+# -- Service Account
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Automatically mount a ServiceAccount's API credentials? Off by default: the agent runs shell commands and
+  # does not need the Kubernetes API.
+  automount: false
+  # -- Annotations to add to the service account (e.g. an IRSA role ARN)
+  annotations: {}
+  # -- The name of the service account to use.
+  name: ""
+# -- Annotations to add to the pod
+podAnnotations: {}
+# -- Labels to add to the pod
+podLabels: {}
+# -- Security context of the pod. fsGroup 10000 is the hermes user of the official image, so the volume is
+# writable by it. The container itself starts as root: the image's s6-overlay init needs PID 1 as root and drops
+# to the hermes user for the agent.
+podSecurityContext:
+  fsGroup: 10000
+  fsGroupChangePolicy: OnRootMismatch
+# -- Seconds Kubernetes waits after SIGTERM before killing the pod, so Hermes can finish writes to SQLite
+terminationGracePeriodSeconds: 60
+
+# -- Hermes container settings
+# @section -- Hermes Settings
+# @default -- A complex object. Please check values below
+hermes:
+  # -- Hermes image settings. When `digest` is set it is used instead of `tag`, e.g. the digest a pipeline pushed.
+  # @section -- Hermes Settings
+  image:
+    repository: nousresearch/hermes-agent
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag whose default is the chart appVersion
+    # @section -- Hermes Settings
+    tag: ""
+    # -- Image digest (sha256:...). Takes precedence over `tag`.
+    # @section -- Hermes Settings
+    digest: ""
+  # -- Container command. Empty keeps the image entrypoint, which must stay PID 1 for s6-overlay.
+  # @section -- Hermes Settings
+  command: []
+  # -- Container args. Empty keeps the image CMD.
+  # @section -- Hermes Settings
+  args: ["gateway", "run"]
+  # -- Hermes container security context
+  # @section -- Hermes Settings
+  securityContext: {}
+  # -- Hermes container resources
+  # @section -- Hermes Settings
+  resources: {}
+  # requests:
+  #   cpu: 500m
+  #   memory: 2Gi
+  # limits:
+  #   memory: 4Gi
+  # -- HERMES_HOME inside the container. The persistent volume is mounted here.
+  # @section -- Hermes Settings
+  home: /opt/data
+  # -- OpenAI-compatible API server. The container listens on 0.0.0.0 so the Service can reach it; requests still
+  # need the bearer key API_SERVER_KEY, which has to come from a secret (see `hermes.env`).
+  # @section -- Hermes Settings
+  api:
+    port: 8642
+  # -- Web dashboard. A non-loopback bind needs basic auth: set HERMES_DASHBOARD_BASIC_AUTH_USERNAME and
+  # HERMES_DASHBOARD_BASIC_AUTH_PASSWORD through `hermes.env`.
+  # @section -- Hermes Settings
+  dashboard:
+    enabled: false
+    port: 9119
+  # -- Hermes container startup probe. Not rendered unless set.
+  # @section -- Hermes Settings
+  startupProbe:
+    httpGet:
+      path: /health
+      port: api
+    periodSeconds: 10
+    failureThreshold: 30
+  # -- Hermes container readiness probe. Not rendered unless set.
+  # @section -- Hermes Settings
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: api
+    periodSeconds: 10
+  # -- Hermes container liveness probe. Not rendered unless set.
+  # @section -- Hermes Settings
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: api
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # -- Hermes container additional volumes
+  # @section -- Hermes Settings
+  volumes: []
+  # -- Hermes container additional volume mounts
+  # @section -- Hermes Settings
+  volumeMounts: []
+  env:
+    # -- Name of an existing Secret to mount as env (e.g. one managed by External Secrets Operator).
+    # Mounted additively alongside `variables` and `envFromSecretsManager`. On key collisions the existing Secret
+    # wins over `variables`, and `envFromSecretsManager` wins over both.
+    # @section -- Hermes Settings
+    existingSecretName: ""
+    # -- Use AWS secrets manager ref. Works with external-secrets operator. Each path renders its own
+    # ExternalSecret, mounted as env after `existingSecretName`.
+    # @section -- Hermes Settings
+    envFromSecretsManager:
+      # -- Render the ExternalSecrets and mount them as env
+      # @section -- Hermes Settings
+      enabled: false
+      # -- Single secret path, e.g. `myapp/staging/hermes_env_vars`. Set either this or `secretPaths`;
+      # setting both fails the render, and so does setting neither while `enabled` is true.
+      # @section -- Hermes Settings
+      secretPath: ""
+      # -- Secret paths mounted in list order. On key collisions a later path wins over an earlier one.
+      # Set either this or `secretPath`.
+      # @section -- Hermes Settings
+      secretPaths: []
+      # -- Name of the secret store the ExternalSecrets reference
+      # @section -- Hermes Settings
+      secretStoreName: global-secret-store
+      # -- Kind of the secret store: ClusterSecretStore or SecretStore
+      # @section -- Hermes Settings
+      secretStoreKind: ClusterSecretStore
+      # -- How often External Secrets Operator refreshes the secrets
+      # @section -- Hermes Settings
+      refreshInterval: 1m
+    # -- Extra plain (non-secret) env variables. Always injected, even when existingSecretName is set.
+    # @section -- Hermes Settings
+    variables: {}
+    #  N8N_BASE_URL: "https://n8n.example.com"
+
+# -- Persistent volume for HERMES_HOME: config.yaml, memory, skills and the SQLite databases
+# @section -- Persistence Settings
+persistence:
+  # -- Create a PersistentVolumeClaim (or use `existingClaim`). Without it the agent loses all state on restart.
+  # @section -- Persistence Settings
+  enabled: true
+  # -- Use an existing PVC instead of creating one
+  # @section -- Persistence Settings
+  existingClaim: ""
+  # -- StorageClass of the PVC. Empty uses the cluster default.
+  # @section -- Persistence Settings
+  storageClass: ""
+  # -- Access mode. ReadWriteOnce (EBS) is the safe choice for SQLite: only one pod can mount it.
+  # @section -- Persistence Settings
+  accessMode: ReadWriteOnce
+  # -- Size of the PVC
+  # @section -- Persistence Settings
+  size: 10Gi
+  # -- Keep the PVC when the release is uninstalled, so the agent data is not lost by accident
+  # @section -- Persistence Settings
+  keepOnUninstall: true
+  # -- Annotations to add to the PVC
+  # @section -- Persistence Settings
+  annotations: {}
+
+# -- Service settings. Exposes the API port, and the dashboard port when the dashboard is enabled.
+# @section -- Networking Settings
+service:
+  type: ClusterIP
+  annotations: {}
+
+# -- Ingress for the API (port 8642)
+# @section -- Networking Settings
+ingress:
+  api:
+    # -- Enables the API ingress when true
+    # @section -- Networking Settings
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: hermes-api.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  # -- Ingress for the dashboard (port 9119). Rendered only when `hermes.dashboard.enabled` is also true.
+  # @section -- Networking Settings
+  dashboard:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: hermes.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+# -- Node selector settings
+nodeSelector: {}
+# -- Tolerations settings
+tolerations: []
+# -- Affinity settings
+affinity: {}
