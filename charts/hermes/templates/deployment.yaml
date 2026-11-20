@@ -1,0 +1,143 @@
+{{- if and (not .Values.persistence.enabled) .Values.persistence.existingClaim }}
+{{- fail "persistence.existingClaim is set but persistence.enabled is false" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hermes.fullname" . }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    {{- $reload := list (printf "%s-env-secrets" (include "hermes.fullname" .)) }}
+    {{- with .Values.hermes.env.existingSecretName }}
+    {{- $reload = append $reload . }}
+    {{- end }}
+    {{- $reload = concat $reload (include "hermes.extSecretNames" . | splitList "," | compact) }}
+    secret.reloader.stakater.com/reload: {{ join ", " $reload | quote }}
+spec:
+  # Always one pod, and the old one stops before the new one starts: Hermes keeps its state in SQLite on a
+  # ReadWriteOnce volume, which only one writer may use. This is why the chart has no replicaCount, HPA or PDB.
+  replicas: 1
+  strategy:
+    type: Recreate
+  {{- if not (kindIs "invalid" .Values.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hermes.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "hermes.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: hermes
+          securityContext:
+            {{- toYaml .Values.hermes.securityContext | nindent 12 }}
+          image: {{ include "hermes.image" . | quote }}
+          imagePullPolicy: {{ .Values.hermes.image.pullPolicy }}
+          {{- with .Values.hermes.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.hermes.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: HERMES_HOME
+              value: {{ .Values.hermes.home | quote }}
+            - name: API_SERVER_ENABLED
+              value: "true"
+            - name: API_SERVER_HOST
+              value: "0.0.0.0"
+            - name: API_SERVER_PORT
+              value: {{ .Values.hermes.api.port | quote }}
+            {{- if .Values.hermes.dashboard.enabled }}
+            - name: HERMES_DASHBOARD
+              value: "1"
+            - name: HERMES_DASHBOARD_HOST
+              value: "0.0.0.0"
+            - name: HERMES_DASHBOARD_PORT
+              value: {{ .Values.hermes.dashboard.port | quote }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "hermes.fullname" . }}-env-secrets
+            {{- if .Values.hermes.env.existingSecretName }}
+            - secretRef:
+                name: {{ .Values.hermes.env.existingSecretName }}
+            {{- end }}
+            {{- range (include "hermes.extSecretNames" . | splitList "," | compact) }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+          ports:
+            - name: api
+              containerPort: {{ .Values.hermes.api.port }}
+              protocol: TCP
+            {{- if .Values.hermes.dashboard.enabled }}
+            - name: dashboard
+              containerPort: {{ .Values.hermes.dashboard.port }}
+              protocol: TCP
+            {{- end }}
+          {{- with .Values.hermes.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.hermes.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.hermes.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.hermes.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.hermes.home }}
+            {{- end }}
+            {{- with .Values.hermes.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "hermes.pvcName" . }}
+        {{- end }}
+        {{- with .Values.hermes.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
