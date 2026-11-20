@@ -412,6 +412,18 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/freeradius-0.6.0/freeradius-0.6.0.tgz
     version: 0.6.0
+  hermes:
+  - apiVersion: v2
+    appVersion: v0.23.1
+    created: "2026-11-20T11:19:04.553603467Z"
+    description: Hermes Agent (Nous Research) as a single stateful pod with a persistent
+      HERMES_HOME
+    digest: 1ad1dcc8bf585d18df7450c76f157018d650207db9f7423f1dc58ccda9741f62
+    name: hermes
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/hermes-0.1.0/hermes-0.1.0.tgz
+    version: 0.1.0
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -523,4 +535,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-11-19T09:28:18.05775591Z"
+generated: "2026-11-20T11:19:04.553697398Z"
