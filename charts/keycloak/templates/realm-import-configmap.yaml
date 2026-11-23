@@ -1,3 +1,6 @@
+{{- if and .Values.realmImport.enabled .Values.realmImport.existingConfigMap .Values.realmImport.realms }}
+{{- fail "realmImport: existingConfigMap and realms are both set, and realms would be ignored. Keep one of them." }}
+{{- end }}
 {{- if and .Values.realmImport.enabled (not .Values.realmImport.existingConfigMap) }}
 {{- if not .Values.realmImport.realms }}
 {{- fail "realmImport.enabled: set realmImport.realms or realmImport.existingConfigMap" }}

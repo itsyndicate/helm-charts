@@ -1,11 +1,21 @@
 {{- if .Values.realmImport.enabled }}
 {{- $ri := .Values.realmImport }}
-{{- if not (dig "secretKeyRef" "key" "" .Values.bootstrapAdmin.password) }}
-{{- fail "realmImport.enabled needs bootstrapAdmin.password.secretKeyRef: the hook logs in with it" }}
-{{- end }}
 {{- if not (or $ri.image.tag $ri.image.digest) }}
 {{- fail "realmImport.image.tag: set the keycloak-config-cli build for your Keycloak version" }}
 {{- end }}
+{{- /*
+Built before the replica check, so a missing realmImport.auth fails the render while scaled to zero too.
+An extraEnv entry replaces the chart's variable of the same name: server-side apply rejects duplicate env names.
+*/}}
+{{- $extraEnv := $ri.extraEnv | default list }}
+{{- $extraNames := list }}
+{{- range $extraEnv }}{{ $extraNames = append $extraNames .name }}{{ end }}
+{{- $env := list }}
+{{- range include "keycloak.realmImportEnv" . | fromYamlArray }}
+{{- if not (has .name $extraNames) }}{{ $env = append $env . }}{{ end }}
+{{- end }}
+{{- /* Scaled to zero (a step of the upgrade runbook) Keycloak cannot answer: the hook would time out and fail it */}}
+{{- if or .Values.autoscaling.enabled (gt (int .Values.replicaCount) 0) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -14,9 +24,12 @@ metadata:
     {{- include "keycloak.labels" . | nindent 4 }}
     app.kubernetes.io/component: realm-import
   annotations:
-    helm.sh/hook: {{ $ri.hooks }}
+    helm.sh/hook: {{ $ri.hooks | quote }}
     helm.sh/hook-weight: "0"
-    helm.sh/hook-delete-policy: {{ $ri.deletePolicy }}
+    {{- /* Left out when empty: an empty value switches off Helm's default, before-hook-creation */}}
+    {{- with $ri.deletePolicy }}
+    helm.sh/hook-delete-policy: {{ . | quote }}
+    {{- end }}
 spec:
   backoffLimit: {{ $ri.backoffLimit }}
   activeDeadlineSeconds: {{ $ri.activeDeadlineSeconds }}
@@ -27,12 +40,15 @@ spec:
         app.kubernetes.io/component: realm-import
     spec:
       restartPolicy: Never
-      serviceAccountName: {{ include "keycloak.serviceAccountName" . }}
+      serviceAccountName: {{ $ri.serviceAccountName | default (include "keycloak.childName" (dict "ctx" . "suffix" "hooks")) | quote }}
       automountServiceAccountToken: false
       enableServiceLinks: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
@@ -40,28 +56,10 @@ spec:
       {{- end }}
       containers:
         - name: keycloak-config-cli
-          image: {{ include "keycloak.imageRef" $ri.image }}
+          image: {{ include "keycloak.imageRef" $ri.image | quote }}
           imagePullPolicy: {{ $ri.image.pullPolicy }}
           env:
-            - name: KEYCLOAK_URL
-              value: {{ include "keycloak.serviceUrl" . | quote }}
-            {{- include "keycloak.envVar" (dict "name" "KEYCLOAK_USER" "field" .Values.bootstrapAdmin.username "what" "bootstrapAdmin.username" "ctx" $) | trim | nindent 12 }}
-            {{- include "keycloak.envVar" (dict "name" "KEYCLOAK_PASSWORD" "field" .Values.bootstrapAdmin.password "what" "bootstrapAdmin.password" "ctx" $) | trim | nindent 12 }}
-            - name: KEYCLOAK_AVAILABILITYCHECK_ENABLED
-              value: "true"
-            - name: KEYCLOAK_AVAILABILITYCHECK_TIMEOUT
-              value: 300s
-            {{- if not .Values.http.enabled }}
-            - name: KEYCLOAK_SSLVERIFY
-              value: "false"
-            {{- end }}
-            - name: IMPORT_FILES_LOCATIONS
-              value: /config/*
-            - name: IMPORT_VARSUBSTITUTION_ENABLED
-              value: "true"
-            {{- with $ri.extraEnv }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- toYaml (concat $env $extraEnv) | nindent 12 }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -79,8 +77,55 @@ spec:
       volumes:
         - name: realms
           configMap:
-            name: {{ $ri.existingConfigMap | default (include "keycloak.childName" (dict "ctx" . "suffix" "realms")) }}
+            name: {{ $ri.existingConfigMap | default (include "keycloak.childName" (dict "ctx" . "suffix" "realms")) | quote }}
         - name: tmp
           emptyDir:
-            sizeLimit: {{ .Values.emptyDirSizeLimits.tmp }}
+            sizeLimit: {{ .Values.emptyDirSizeLimits.tmp | toJson }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- /* Node affinity only: a pod (anti-)affinity written for the Keycloak pods would match or repel this pod */}}
+      {{- with pick (.Values.affinity | default dict) "nodeAffinity" }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
+
+{{- /*
+Env the chart sets on the hook container, as a YAML list. A named template only because the Job parses it to drop
+the entries realmImport.extraEnv replaces.
+*/}}
+{{- define "keycloak.realmImportEnv" -}}
+{{- $ri := .Values.realmImport -}}
+- name: KEYCLOAK_URL
+  value: {{ include "keycloak.serviceUrl" . | quote }}
+{{- if dig "secretKeyRef" "key" "" $ri.auth.clientSecret }}
+- name: KEYCLOAK_GRANTTYPE
+  value: client_credentials
+{{- include "keycloak.envVar" (dict "name" "KEYCLOAK_CLIENTID" "field" $ri.auth.clientId "what" "realmImport.auth.clientId" "ctx" .) | required "realmImport.auth.clientId: set the id of the client that realmImport.auth.clientSecret belongs to" }}
+{{- include "keycloak.envVar" (dict "name" "KEYCLOAK_CLIENTSECRET" "field" $ri.auth.clientSecret "what" "realmImport.auth.clientSecret" "ctx" .) }}
+{{- else if dig "secretKeyRef" "key" "" $ri.auth.password }}
+{{- include "keycloak.envVar" (dict "name" "KEYCLOAK_USER" "field" $ri.auth.username "what" "realmImport.auth.username" "ctx" .) | required "realmImport.auth.username: set the user that realmImport.auth.password belongs to" }}
+{{- include "keycloak.envVar" (dict "name" "KEYCLOAK_PASSWORD" "field" $ri.auth.password "what" "realmImport.auth.password" "ctx" .) }}
+{{- else }}
+{{- fail "realmImport.enabled needs realmImport.auth: either clientId + clientSecret.secretKeyRef (recommended: a master-realm client with service accounts enabled and the kc-admin-api scope; the role create-realm covers the realms it creates, each existing realm also needs its <realm>-realm client roles) or username + password.secretKeyRef (an admin user, password grant on admin-cli). The hook does not use bootstrapAdmin." }}
+{{- end }}
+- name: KEYCLOAK_AVAILABILITYCHECK_ENABLED
+  value: "true"
+- name: KEYCLOAK_AVAILABILITYCHECK_TIMEOUT
+  value: 300s
+{{- if not .Values.http.enabled }}
+- name: KEYCLOAK_SSLVERIFY
+  value: "false"
+{{- end }}
+- name: IMPORT_FILES_LOCATIONS
+  value: /config/*
+- name: IMPORT_VARSUBSTITUTION_ENABLED
+  value: {{ $ri.varSubstitution | quote }}
 {{- end }}

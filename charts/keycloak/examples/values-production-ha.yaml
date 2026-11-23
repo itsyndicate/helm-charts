@@ -1,8 +1,8 @@
-# Production HA: 3 replicas behind ingress-nginx, the admin console on its own internal host, Postgres
-# credentials from existing Secrets, NetworkPolicy, ServiceMonitor, HPA, PDB and the realm-import hook.
+# AWS, production, HA: 3 to 6 pods (HPA) behind the AWS Load Balancer Controller, the admin console on an internal
+# ALB, credentials from an existing Secret (here `keycloak-secrets`), NetworkPolicy, PodDisruptionBudget and the
+# realm-import hook. Hosts, ARNs, subnets, CIDRs, class names and Secret keys are placeholders. Prove it on a
+# staging environment of the same topology first (docs/migrating-from-bitnami.md has a rehearsal checklist).
 #   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-production-ha.yaml
-
-replicaCount: 3
 
 image:
   tag: "26.8.2"
@@ -13,27 +13,45 @@ hostname:
   adminUrl: https://id-admin.internal.example.com/
 proxy:
   headers: xforwarded
+  # The subnets of the two ALBs, the same CIDRs as networkPolicy.ingressFrom. Not the VPC CIDR: with the VPC CNI
+  # pod IPs come from the node subnets, and every peer in a trusted range can send forged X-Forwarded-* headers.
+  # An ALB appends to X-Forwarded-For and Keycloak reads the leftmost element, so the client address Keycloak
+  # records is still client-controlled.
+  trustedAddresses: 10.0.0.0/24,10.0.1.0/24
 
 config:
-  log-console-output: json
+  # Keep serving while the ALB takes the target out (chart default: 15s)
+  shutdown-delay: 30s
+  # One fixed pool size, as upstream recommends (Keycloak's default maximum is 100 per pod).
+  # Rule: autoscaling.maxReplicas x db-pool-max-size <= about 80% of the database's max_connections. Here 6 x 30 = 180.
+  db-pool-initial-size: 30
+  db-pool-min-size: 30
+  db-pool-max-size: 30
+  # Metrics for SLOs: request latency histograms and user events (logins, errors). The user-event metrics need the
+  # user-event-metrics feature. Both are build-time options: an optimized image must be built with them.
+  # Not here: cache-metrics-histograms-enabled added about 6,300 series on one idle pod.
+  features: user-event-metrics
+  http-metrics-histograms-enabled: true
+  event-metrics-user-enabled: true
 
 database:
   host:
-    secretKeyRef: {name: keycloak-db, key: host}
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_HOST}
   database:
-    value: keycloak
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_NAME}
   username:
-    secretKeyRef: {name: keycloak-db, key: username}
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_USER}
   password:
-    secretKeyRef: {name: keycloak-db, key: password}
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_PASSWORD}
   urlProperties: "?sslmode=require"
 
-bootstrapAdmin:
-  password:
-    secretKeyRef: {name: keycloak-admin, key: password}
+# No bootstrapAdmin: it only acts on a new, empty database
 
-cache:
-  nodeNameFromPod: true
+# replicaCount is ignored while autoscaling is on
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 6
 
 resources:
   requests:
@@ -42,28 +60,77 @@ resources:
   limits:
     memory: 2Gi
 
-podAnnotations:
-  karpenter.sh/do-not-disrupt: "true"
+# On-demand nodes: a Spot reclaim takes a pod with two minutes' notice.
+# No karpenter.sh/do-not-disrupt annotation: the PodDisruptionBudget (maxUnavailable: 1) already serialises drains.
+nodeSelector:
+  kubernetes.io/arch: amd64
+  karpenter.sh/capacity-type: on-demand
 
+# Never two pods on one node. Zones are only preferred: a strict zone constraint leaves replacement pods Pending
+# during a zone outage.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+
+# Health check of both target groups, on the traffic port
+service:
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /realms/master
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+
+# Public ALB: the default public paths, and 403 for the master realm
 ingress:
   enabled: true
-  className: nginx
+  className: alb
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
-  # Public paths only: the admin console is served by ingress.admin
+    external-dns.alpha.kubernetes.io/hostname: id.example.com
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    # Subnets of their own for the ALB, without nodes or pods
+    alb.ingress.kubernetes.io/subnets: subnet-0aaaaaaaaaaaaaaa1,subnet-0aaaaaaaaaaaaaaa2,subnet-0aaaaaaaaaaaaaaa3
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-east-1:123456789012:regional/webacl/example/00000000-0000-0000-0000-000000000000
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    alb.ingress.kubernetes.io/actions.deny-master: >-
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden"}}
+  # A list replaces the default whole, so the default paths are repeated
   paths:
+    - path: /realms/master/
+      pathType: Prefix
+      backend:
+        service:
+          name: deny-master
+          port:
+            name: use-annotation
     - path: /realms/
       pathType: Prefix
     - path: /resources/
       pathType: Prefix
+    - path: /.well-known/
+      pathType: Prefix
     - path: /robots.txt
       pathType: Exact
-  tls:
-    - secretName: id-example-com-tls
+  # Internal ALB for the admin console; its host comes from hostname.adminUrl
   admin:
     enabled: true
-    className: nginx-internal
-    host: id-admin.internal.example.com
+    # Placeholder: your internal ALB IngressClass
+    className: alb-internal
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: id-admin.internal.example.com
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/subnets: subnet-0bbbbbbbbbbbbbbb1,subnet-0bbbbbbbbbbbbbbb2,subnet-0bbbbbbbbbbbbbbb3
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/11111111-1111-1111-1111-111111111111
+      alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     paths:
       - path: /admin/
         pathType: Prefix
@@ -71,52 +138,65 @@ ingress:
         pathType: Prefix
       - path: /resources/
         pathType: Prefix
-    tls:
-      - secretName: id-admin-internal-example-com-tls
 
 networkPolicy:
   enabled: true
+  # target-type ip: the ALB nodes connect to the pod IP. Only the two ALB subnet ranges, which hold no pods or nodes.
   ingressFrom:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: ingress-nginx
+    - ipBlock:
+        cidr: 10.0.0.0/24 # subnets of the public ALB
+    - ipBlock:
+        cidr: 10.0.1.0/24 # subnets of the internal ALB
+  # Whatever scrapes /metrics on the management port (placeholder namespace)
   metricsFrom:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: monitoring
+  # Database subnets, on 5432 (database.port.value is empty)
   databaseTo:
     - ipBlock:
-        cidr: 10.0.0.0/16
-  # SMTP and identity brokering to external IdPs
+        cidr: 10.0.32.0/20
+  # Identity brokering (443) and SMTP (587) to the internet only: nothing private, CG-NAT or link-local
   extraEgress:
-    - ports:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
         - port: 443
           protocol: TCP
         - port: 587
           protocol: TCP
 
-serviceMonitor:
-  enabled: true
-  labels:
-    release: kube-prometheus-stack
-
-autoscaling:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 6
-
-reloader:
-  enabled: true
+# With the Prometheus Operator in the cluster:
+# serviceMonitor:
+#   enabled: true
 
 realmImport:
   enabled: true
   image:
-    # No keycloak-config-cli build for 26.8 yet; the 26.5.5 one talks the same admin API
+    # The newest keycloak-config-cli build is for Keycloak 26.5.5. Verify on dev that it logs in and imports on 26.8.
     tag: "6.5.1-26.5.5"
+    digest: sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
+  # A client of the master realm: service accounts enabled, client scope kc-admin-api, role create-realm. That covers
+  # the realms the client creates itself. For a realm that already exists (a migrated database) also grant it that
+  # realm's <realm>-realm client roles, here example-realm; grant the admin role only if you must.
+  auth:
+    clientId:
+      value: realm-import
+    clientSecret:
+      secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_REALM_IMPORT_CLIENT_SECRET}
   realms:
     example.json:
       realm: example
       enabled: true
+      # Brute-force detection is off by default in Keycloak
+      bruteForceProtected: true
       clients:
         - clientId: web
           publicClient: true
