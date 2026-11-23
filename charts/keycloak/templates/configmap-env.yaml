@@ -1,0 +1,61 @@
+{{- /* Plain Keycloak options, mounted with envFrom. The container env (secrets, extraEnv) wins over these. */}}
+{{- $data := dict
+  "KC_DB" (required "database.vendor is required" .Values.database.vendor)
+  "KC_HEALTH_ENABLED" "true"
+  "KC_METRICS_ENABLED" (toString .Values.metrics.enabled)
+  "KC_HTTP_ENABLED" (toString .Values.http.enabled)
+  "KC_HTTP_PORT" (toString .Values.http.port)
+  "KC_HTTP_RELATIVE_PATH" .Values.http.relativePath
+  "KC_HTTP_MANAGEMENT_PORT" (toString .Values.http.managementPort)
+  "KC_HOSTNAME_STRICT" (toString .Values.hostname.strict)
+  "KC_CACHE" .Values.cache.type }}
+{{- with .Values.database.urlProperties }}
+{{- $_ := set $data "KC_DB_URL_PROPERTIES" . }}
+{{- end }}
+{{- with .Values.http.managementRelativePath }}
+{{- $_ := set $data "KC_HTTP_MANAGEMENT_RELATIVE_PATH" . }}
+{{- end }}
+{{- if .Values.https.enabled }}
+{{- $_ := set $data "KC_HTTPS_PORT" (toString .Values.https.port) }}
+{{- $_ := set $data "KC_HTTPS_CERTIFICATE_FILE" "/opt/keycloak/conf/tls/tls.crt" }}
+{{- $_ := set $data "KC_HTTPS_CERTIFICATE_KEY_FILE" "/opt/keycloak/conf/tls/tls.key" }}
+{{- end }}
+{{- with .Values.hostname.url }}
+{{- $_ := set $data "KC_HOSTNAME" (tpl . $) }}
+{{- end }}
+{{- with .Values.hostname.adminUrl }}
+{{- $_ := set $data "KC_HOSTNAME_ADMIN" (tpl . $) }}
+{{- end }}
+{{- with .Values.proxy.headers }}
+{{- $_ := set $data "KC_PROXY_HEADERS" . }}
+{{- end }}
+{{- $kubePing := and (eq .Values.cache.type "ispn") (eq .Values.cache.stack "kubernetes") }}
+{{- if eq .Values.cache.type "ispn" }}
+{{- $_ := set $data "KC_CACHE_STACK" .Values.cache.stack }}
+{{- end }}
+{{- with .Values.jvm.jdkJavaOptions }}
+{{- $_ := set $data "JDK_JAVA_OPTIONS" . }}
+{{- end }}
+{{- $append := list }}
+{{- if $kubePing }}
+{{- $append = append $append (printf "-Djgroups.dns.query=%s.%s.svc.cluster.local" (include "keycloak.headlessName" .) .Release.Namespace) }}
+{{- end }}
+{{- with .Values.jvm.javaOptsAppend }}
+{{- $append = append $append . }}
+{{- end }}
+{{- with $append }}
+{{- $_ := set $data "JAVA_OPTS_APPEND" (join " " .) }}
+{{- end }}
+{{- range $option, $value := .Values.config }}
+{{- $_ := set $data (printf "KC_%s" ($option | upper | replace "-" "_")) (toString $value) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "keycloak.childName" (dict "ctx" . "suffix" "env") }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := $data }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

@@ -1,0 +1,126 @@
+# Production HA: 3 replicas behind ingress-nginx, the admin console on its own internal host, Postgres
+# credentials from existing Secrets, NetworkPolicy, ServiceMonitor, HPA, PDB and the realm-import hook.
+#   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-production-ha.yaml
+
+replicaCount: 3
+
+image:
+  tag: "26.8.2"
+  digest: sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+
+hostname:
+  url: https://id.example.com/
+  adminUrl: https://id-admin.internal.example.com/
+proxy:
+  headers: xforwarded
+
+config:
+  log-console-output: json
+
+database:
+  host:
+    secretKeyRef: {name: keycloak-db, key: host}
+  database:
+    value: keycloak
+  username:
+    secretKeyRef: {name: keycloak-db, key: username}
+  password:
+    secretKeyRef: {name: keycloak-db, key: password}
+  urlProperties: "?sslmode=require"
+
+bootstrapAdmin:
+  password:
+    secretKeyRef: {name: keycloak-admin, key: password}
+
+cache:
+  nodeNameFromPod: true
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    memory: 2Gi
+
+podAnnotations:
+  karpenter.sh/do-not-disrupt: "true"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  # Public paths only: the admin console is served by ingress.admin
+  paths:
+    - path: /realms/
+      pathType: Prefix
+    - path: /resources/
+      pathType: Prefix
+    - path: /robots.txt
+      pathType: Exact
+  tls:
+    - secretName: id-example-com-tls
+  admin:
+    enabled: true
+    className: nginx-internal
+    host: id-admin.internal.example.com
+    paths:
+      - path: /admin/
+        pathType: Prefix
+      - path: /realms/master/
+        pathType: Prefix
+      - path: /resources/
+        pathType: Prefix
+    tls:
+      - secretName: id-admin-internal-example-com-tls
+
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+  databaseTo:
+    - ipBlock:
+        cidr: 10.0.0.0/16
+  # SMTP and identity brokering to external IdPs
+  extraEgress:
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 587
+          protocol: TCP
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 6
+
+reloader:
+  enabled: true
+
+realmImport:
+  enabled: true
+  image:
+    # No keycloak-config-cli build for 26.8 yet; the 26.5.5 one talks the same admin API
+    tag: "6.5.1-26.5.5"
+  realms:
+    example.json:
+      realm: example
+      enabled: true
+      clients:
+        - clientId: web
+          publicClient: true
+          redirectUris:
+            - https://app.example.com/*
+          webOrigins:
+            - https://app.example.com

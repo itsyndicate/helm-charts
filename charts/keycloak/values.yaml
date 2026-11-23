@@ -1,0 +1,550 @@
+# Every value is real YAML (lists and maps). Only the strings marked "rendered with tpl" go through `tpl`.
+# Values layers (Flux valuesFrom, several -f files) merge maps key by key but replace lists whole.
+
+# -- Overrides the chart name (`app.kubernetes.io/name`). Part of the StatefulSet selector: changing it later
+# forces a delete and recreate of the StatefulSet.
+nameOverride: ""
+# -- Overrides the full resource name. Not part of any selector.
+fullnameOverride: ""
+# -- Labels added to every resource, e.g. `app.kubernetes.io/part-of` or an `owner` label an admission policy needs
+commonLabels: {}
+
+# -- Keycloak image. `tag` defaults to the chart appVersion. With `digest` set the image renders as
+# `repository:tag@digest`, so the digest is what runs and the tag stays readable.
+# @section -- Image
+image:
+  repository: quay.io/keycloak/keycloak
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+# -- Registry credentials for private images (list of `{name: <secret>}`)
+# @section -- Image
+imagePullSecrets: []
+
+# -- Pass `--optimized` to `kc.sh start`. Only for images pre-built with `kc.sh build`: the stock image is not, and
+# with `--optimized` it ignores every build-time option set here (cache, db, health, metrics, features).
+# @section -- Keycloak
+optimized: false
+# -- Extra arguments after `start [--optimized]`. The chart always runs `start`, never `start-dev`.
+# @section -- Keycloak
+extraArgs: []
+
+# -- Public URL of Keycloak (KC_HOSTNAME), e.g. `https://id.example.com/`. Rendered with tpl. Required unless
+# `hostname.strict` is false. Its host is also the default Ingress and HTTPRoute host.
+# @section -- Keycloak
+hostname:
+  url: ""
+  # -- Admin console URL (KC_HOSTNAME_ADMIN). Rendered with tpl, so `"{{ .Values.hostname.url }}"` works.
+  # @section -- Keycloak
+  adminUrl: ""
+  # -- KC_HOSTNAME_STRICT
+  # @section -- Keycloak
+  strict: true
+
+# -- HTTP listener. TLS usually ends at the load balancer, so plain HTTP is on (KC_HTTP_ENABLED).
+# @section -- Keycloak
+http:
+  enabled: true
+  port: 8080
+  # -- KC_HTTP_RELATIVE_PATH. `/` keeps every URL and the token issuer at the root.
+  # @section -- Keycloak
+  relativePath: /
+  # -- Management port: `/health/*` and `/metrics` (KC_HTTP_MANAGEMENT_PORT). Never exposed on the Ingress.
+  # @section -- Keycloak
+  managementPort: 9000
+  # -- KC_HTTP_MANAGEMENT_RELATIVE_PATH. Empty inherits `relativePath`, as Keycloak does. Probes and the
+  # ServiceMonitor follow it.
+  # @section -- Keycloak
+  managementRelativePath: ""
+
+# -- HTTPS listener on 8443 with a `kubernetes.io/tls` Secret mounted as files (KC_HTTPS_CERTIFICATE_FILE /
+# KC_HTTPS_CERTIFICATE_KEY_FILE)
+# @section -- Keycloak
+https:
+  enabled: false
+  port: 8443
+  certificateSecret: ""
+
+# -- Which proxy headers to trust (KC_PROXY_HEADERS): `xforwarded`, `forwarded` or empty for none. Set it only
+# when every request comes through the proxy, otherwise clients can spoof their address and scheme.
+# @section -- Keycloak
+proxy:
+  headers: ""
+
+# -- Expose `/metrics` on the management port (KC_METRICS_ENABLED). Health (KC_HEALTH_ENABLED) is always on:
+# the probes need it.
+# @section -- Keycloak
+metrics:
+  enabled: true
+
+# -- Plain Keycloak options as `<option-name>: <value>`, rendered into the env ConfigMap as `KC_<OPTION_NAME>`.
+# A map, so values layers (e.g. Flux valuesFrom) merge key by key. Secrets go through the `database`,
+# `bootstrapAdmin` or `extraEnv` secret references, never here.
+# @section -- Keycloak
+config: {}
+#  log-level: INFO
+#  log-console-output: json
+#  features: token-exchange
+
+# -- JVM options. Never set JAVA_OPTS: it replaces the kc.sh defaults, including the heap `-XX:MaxRAMPercentage=70`.
+# @section -- Keycloak
+jvm:
+  # -- JDK_JAVA_OPTIONS, read by the java launcher itself (log line `NOTE: Picked up JDK_JAVA_OPTIONS`).
+  # E.g. `-XX:-UseBASE64Intrinsics` (CVE-2026-114938).
+  # @section -- Keycloak
+  jdkJavaOptions: ""
+  # -- JAVA_OPTS_APPEND, appended by kc.sh after its defaults. With `cache.stack: kubernetes` the chart prepends
+  # `-Djgroups.dns.query=<headless>.<namespace>.svc.cluster.local`; another `-Djgroups.dns.query` here wins.
+  # @section -- Keycloak
+  javaOptsAppend: ""
+
+# -- External database. Each field takes either `value` (goes to the env ConfigMap) or
+# `secretKeyRef: {name, key}` (goes to the container env and wins over `value`). An empty `secretKeyRef.name` means
+# the Secret of the chart's own ExternalSecret.
+# @section -- Database
+database:
+  # -- KC_DB: postgres, mysql, mariadb, mssql, oracle
+  # @section -- Database
+  vendor: postgres
+  # -- KC_DB_URL_HOST
+  # @section -- Database
+  host:
+    value: ""
+    secretKeyRef: {}
+  # -- KC_DB_URL_PORT. Also the egress port of the NetworkPolicy.
+  # @section -- Database
+  port:
+    value: "5432"
+    secretKeyRef: {}
+  # -- KC_DB_URL_DATABASE
+  # @section -- Database
+  database:
+    value: ""
+    secretKeyRef: {}
+  # -- KC_DB_SCHEMA
+  # @section -- Database
+  schema:
+    value: ""
+    secretKeyRef: {}
+  # -- KC_DB_USERNAME
+  # @section -- Database
+  username:
+    value: ""
+    secretKeyRef: {}
+  # -- KC_DB_PASSWORD. Secret only: the schema rejects `value`.
+  # @section -- Database
+  password:
+    secretKeyRef: {}
+  # -- KC_DB_URL, a full JDBC URL. Overrides host, port and database.
+  # @section -- Database
+  url:
+    value: ""
+    secretKeyRef: {}
+  # -- KC_DB_URL_PROPERTIES, e.g. `?sslmode=require`
+  # @section -- Database
+  urlProperties: ""
+
+# -- Temporary admin created on the first start against an empty database (KC_BOOTSTRAP_ADMIN_USERNAME /
+# KC_BOOTSTRAP_ADMIN_PASSWORD; `KEYCLOAK_ADMIN` is deprecated). Same `value` / `secretKeyRef` shape as `database`.
+# Not rendered while the password is unset. The realm-import hook uses these credentials too.
+# @section -- Database
+bootstrapAdmin:
+  username:
+    value: admin
+    secretKeyRef: {}
+  password:
+    secretKeyRef: {}
+
+# -- Infinispan clustering
+# @section -- Cache
+cache:
+  # -- KC_CACHE: `ispn` (clustered) or `local` (single node only)
+  # @section -- Cache
+  type: ispn
+  # -- KC_CACHE_STACK: `jdbc-ping` (default since 26.1, nodes find each other through the database) or
+  # `kubernetes` (DNS_PING on the headless Service, deprecated since 26.3). Changing it needs every node stopped.
+  # @section -- Cache
+  stack: jdbc-ping
+  # -- Set KC_CACHE_EMBEDDED_NODE_NAME from the pod name, as the 26.8 upgrade guide recommends for non-operator
+  # setups. Keycloak 26.1 has no such option: keep it off there.
+  # @section -- Cache
+  nodeNameFromPod: false
+
+# -- Provider JARs and themes copied from images. A map, so values layers merge per entry: a base can set `source`
+# and an env overlay only `image` (where a Flux `$imagepolicy` marker works on the plain `image:` line).
+# Each entry renders an init container `provider-<name>` that runs `cp -R <source>/. /target/`, where `/target` is
+# an emptyDir mounted in Keycloak at `/opt/keycloak/providers` (`target: providers`, the default) or
+# `/opt/keycloak/themes` (`target: themes`). The image needs `sh` and `cp`, and its files must be readable by
+# uid 1000. `command` replaces the copy command and must write to `/target`.
+# @section -- Providers
+providers: {}
+#  example-theme:
+#    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/keycloak-themes:42 # {"$imagepolicy": "flux-system:keycloak-themes"}
+#    imagePullPolicy: IfNotPresent
+#    source: /usr/theme/example-theme
+#    target: providers
+#    command: []
+# -- Resources of the init containers the chart renders (the lib/quarkus seed and the providers)
+# @section -- Providers
+initContainerResources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+
+# -- Pod replicas. Ignored while `autoscaling.enabled`.
+# @section -- Workload
+replicaCount: 1
+# -- Old controller revisions kept for rollback (null falls back to the Kubernetes default of 10)
+# @section -- Workload
+revisionHistoryLimit: 3
+# -- `Parallel` starts and stops all pods at once; `OrderedReady` one by one
+# @section -- Workload
+podManagementPolicy: Parallel
+# -- StatefulSet update strategy. `RollingUpdate` is safe for config changes on the same version only. A Keycloak
+# minor or patch upgrade migrates the schema one way and must not run next to the old version: see README
+# "Upgrading Keycloak" (scale to 0, or `type: OnDelete`).
+# @section -- Workload
+updateStrategy:
+  type: RollingUpdate
+# -- Seconds between SIGTERM and SIGKILL
+# @section -- Workload
+terminationGracePeriodSeconds: 60
+# -- Container resources. No CPU limit: the boot-time re-augmentation and JIT warm-up are CPU-heavy and a limit only
+# throttles them. kc.sh sizes the heap at 70% of the memory limit.
+# @section -- Workload
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    memory: 1Gi
+
+# -- Startup probe on `<management path>/health/started`. The chart sets `httpGet`; only timings live here. Size
+# `failureThreshold` x `periodSeconds` for the first start of a new version: the schema migration runs before the
+# probe passes (the 26.6 REALM_ID backfill took about 22 min per 10M offline client sessions).
+# @section -- Probes
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 90
+# -- Liveness probe on `<management path>/health/live`. Kept loose: a restart never fixes a slow database.
+# @section -- Probes
+livenessProbe:
+  enabled: true
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 5
+# -- Readiness probe on `<management path>/health/ready` (HTTP, not TCP: since 26.6 the ports open before init ends)
+# @section -- Probes
+readinessProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+# -- ServiceAccount. Keycloak does not call the Kubernetes API with either cache stack.
+# @section -- Security
+serviceAccount:
+  create: true
+  # -- Name. Empty uses the full name. Keep it stable when an IRSA trust policy references it.
+  # @section -- Security
+  name: ""
+  # -- Annotations, e.g. `eks.amazonaws.com/role-arn`
+  # @section -- Security
+  annotations: {}
+  # -- Mount the API token into the pod
+  # @section -- Security
+  automountServiceAccountToken: false
+# -- Pod security context (restricted Pod Security Standard). uid 1000 is the keycloak user of the official image.
+# @section -- Security
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+# -- Security context of every container the chart renders (Keycloak, init containers, hooks)
+# @section -- Security
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+# -- Size limits of the emptyDirs behind the read-only root: `/tmp`, `/opt/keycloak/data` (transaction logs) and,
+# unless `optimized`, `/opt/keycloak/lib/quarkus`. A non-optimized `start` re-augments into lib/quarkus at boot, and
+# an empty dir there fails (`quarkus-application.dat` missing), so an init container from the Keycloak image first
+# copies the image's lib/quarkus into it (2-5 MiB).
+# @section -- Security
+emptyDirSizeLimits:
+  tmp: 256Mi
+  data: 256Mi
+  quarkus: 64Mi
+  # -- Each of the `providers` and `themes` emptyDirs
+  # @section -- Security
+  providers: 256Mi
+
+# -- Service for HTTP(S). The management port is only on the headless Service.
+# @section -- Networking
+service:
+  type: ClusterIP
+  # -- Annotations, e.g. ALB health-check settings for `target-type: ip`
+  # @section -- Networking
+  annotations: {}
+  labels: {}
+
+# -- Ingress (networking.k8s.io/v1) to the http port
+# @section -- Networking
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # -- Host. Rendered with tpl. Empty takes the host of `hostname.url`.
+  # @section -- Networking
+  host: ""
+  # -- Paths to the http port. To keep the admin console off the public Ingress, list only the public paths
+  # (`/realms/`, `/resources/`, `/robots.txt`) and serve `/admin/` through `ingress.admin`.
+  # @section -- Networking
+  paths:
+    - path: /
+      pathType: Prefix
+  # -- TLS entries (`[{secretName, hosts}]`). Empty `hosts` take `host`. Leave empty when TLS ends at the load
+  # balancer.
+  # @section -- Networking
+  tls: []
+  # -- A second Ingress `<fullname>-admin` with its own class, annotations and host, e.g. an internal load
+  # balancer or a source-IP allow list. Independent of `ingress.enabled`. Empty `host` takes the main Ingress host.
+  # @section -- Networking
+  admin:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    # -- Paths. Empty: `<relativePath>admin/`. On a separate admin host (with `hostname.adminUrl` pointing at it)
+    # also add `/realms/master/` and `/resources/`.
+    # @section -- Networking
+    paths: []
+    tls: []
+
+# -- Gateway API HTTPRoute (gateway.networking.k8s.io/v1)
+# @section -- Networking
+httpRoute:
+  enabled: false
+  annotations: {}
+  labels: {}
+  # -- Gateways to attach to, e.g. `[{name: public, namespace: gateway, sectionName: https}]`. Required when enabled.
+  # @section -- Networking
+  parentRefs: []
+  # -- Hostnames. Rendered with tpl. Empty takes the host of `hostname.url`.
+  # @section -- Networking
+  hostnames: []
+  # -- HTTPRouteRules (matches, filters, backendRefs, timeouts). A rule without `backendRefs` goes to the chart's
+  # Service on the http port.
+  # @section -- Networking
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+
+# -- NetworkPolicy, default deny. Always allowed: DNS to kube-system, and all traffic between this release's pods
+# (clustering on 7800/57800, the hook and test pods).
+# @section -- Networking
+networkPolicy:
+  enabled: false
+  # -- Peers allowed to the http(s) port: ingress controller or gateway pods, or the load balancer subnets
+  # (`ipBlock`) for ALB `target-type: ip`
+  # @section -- Networking
+  ingressFrom: []
+  # -- Peers allowed to the management port, e.g. Prometheus
+  # @section -- Networking
+  metricsFrom: []
+  # -- Egress peers of the database (`ipBlock` of the RDS subnets), on `database.port.value`
+  # @section -- Networking
+  databaseTo: []
+  # -- Extra ingress rules. Identity brokering, SMTP and other outbound calls need `extraEgress`.
+  # @section -- Networking
+  extraIngress: []
+  # -- Extra egress rules
+  # @section -- Networking
+  extraEgress: []
+
+# -- ExternalSecret (external-secrets.io/v1) whose Secret the `secretKeyRef`s with an empty name point to
+# @section -- Secrets
+externalSecret:
+  enabled: false
+  # -- Name of the ExternalSecret and its Secret. Empty: `<fullname>-secrets`.
+  # @section -- Secrets
+  name: ""
+  refreshInterval: 1m
+  secretStoreRef:
+    name: global-secret-store
+    kind: ClusterSecretStore
+  # -- Whole secrets to extract, e.g. `[{extract: {key: myapp/prod/keycloak}}]`. Set this or `data`.
+  # @section -- Secrets
+  dataFrom: []
+  # -- Single keys, e.g. `[{secretKey: db-password, remoteRef: {key: myapp/prod/keycloak, property: password}}]`
+  # @section -- Secrets
+  data: []
+
+# -- Stakater Reloader annotations on the StatefulSet
+# @section -- Secrets
+reloader:
+  enabled: false
+  # -- `targeted`: `secret.reloader.stakater.com/reload` / `configmap.reloader.stakater.com/reload` with every
+  # Secret and ConfigMap the pod references; `auto`: `reloader.stakater.com/auto: "true"`
+  # @section -- Secrets
+  mode: targeted
+
+# -- Prometheus Operator ServiceMonitor (monitoring.coreos.com/v1) on the management port, path
+# `<management path>/metrics`. Needs `metrics.enabled`.
+# @section -- Monitoring
+serviceMonitor:
+  enabled: false
+  # -- Labels the Prometheus `serviceMonitorSelector` matches, e.g. `release: kube-prometheus-stack`
+  # @section -- Monitoring
+  labels: {}
+  interval: 30s
+  scrapeTimeout: 10s
+  relabelings: []
+  metricRelabelings: []
+
+# -- PodDisruptionBudget (policy/v1). Set exactly one of `maxUnavailable` and `minAvailable` (null the other).
+# @section -- Scheduling
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+  minAvailable: null
+
+# -- HorizontalPodAutoscaler (autoscaling/v2) on CPU. Memory is no signal for a JVM.
+# @section -- Scheduling
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  # -- HPA behavior. Default: scale down slowly (300 s window, 50 % per minute), up fast.
+  # @section -- Scheduling
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+
+# -- Topology spread. A constraint without `labelSelector` gets the chart's selector labels. The defaults spread
+# over zones and nodes but never block scheduling (`ScheduleAnyway`), like a preferred anti-affinity.
+# @section -- Scheduling
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+# -- Affinity
+# @section -- Scheduling
+affinity: {}
+# -- Node selector
+# @section -- Scheduling
+nodeSelector: {}
+# -- Tolerations
+# @section -- Scheduling
+tolerations: []
+# -- PriorityClass of the pods
+# @section -- Scheduling
+priorityClassName: ""
+
+# -- Annotations of the pods, e.g. `karpenter.sh/do-not-disrupt: "true"`
+# @section -- Extras
+podAnnotations: {}
+# -- Labels of the pods (not part of the selector)
+# @section -- Extras
+podLabels: {}
+# -- Extra env vars of the Keycloak container (EnvVar list). They win over everything the chart sets.
+# @section -- Extras
+extraEnv: []
+# -- Extra envFrom sources of the Keycloak container
+# @section -- Extras
+extraEnvFrom: []
+# -- Extra pod volumes
+# @section -- Extras
+extraVolumes: []
+# -- Extra volume mounts of the Keycloak container
+# @section -- Extras
+extraVolumeMounts: []
+# -- Extra init containers, run after the provider init containers
+# @section -- Extras
+initContainers: []
+# -- Sidecar containers
+# @section -- Extras
+extraContainers: []
+# -- Extra manifests, rendered with tpl
+# @section -- Extras
+extraObjects: []
+
+# -- Post-install / post-upgrade Job that applies realm files with keycloak-config-cli (idempotent). Off by default.
+# It logs in with `bootstrapAdmin` and reaches Keycloak through the chart's Service.
+# @section -- Hooks
+realmImport:
+  enabled: false
+  # -- keycloak-config-cli image. Its tag carries the Keycloak version it was built for (e.g. `6.5.1-26.1.0`): pick
+  # the one closest to `image.tag`. Required when enabled.
+  # @section -- Hooks
+  image:
+    repository: adorsys/keycloak-config-cli
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  # -- Realm files as `<file name>: <realm representation>` (real YAML, rendered to JSON in a ConfigMap)
+  # @section -- Hooks
+  realms: {}
+  # -- Use an existing ConfigMap of realm files instead of `realms`
+  # @section -- Hooks
+  existingConfigMap: ""
+  # -- Hook events
+  # @section -- Hooks
+  hooks: post-install,post-upgrade
+  # -- `helm.sh/hook-delete-policy`
+  # @section -- Hooks
+  deletePolicy: before-hook-creation,hook-succeeded
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  # -- Extra env, e.g. secrets referenced from realm files with `$(env:NAME)` (IMPORT_VARSUBSTITUTION_ENABLED is on)
+  # @section -- Hooks
+  extraEnv: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# -- `helm test` pod: checks `/health/ready` and `/realms/master/.well-known/openid-configuration`
+# @section -- Hooks
+tests:
+  enabled: true
+  image:
+    repository: busybox
+    tag: "1.37"
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 32Mi

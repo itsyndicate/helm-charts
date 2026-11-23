@@ -1,0 +1,31 @@
+{{- /* Governing Service of the StatefulSet. Also carries the management port for the ServiceMonitor and the
+DNS records of the `kubernetes` cache stack, which must list pods before they are ready. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "keycloak.headlessName" . }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "keycloak.podSelectorLabels" . | nindent 4 }}
+  ports:
+    {{- if .Values.http.enabled }}
+    - name: http
+      port: {{ .Values.http.port }}
+      targetPort: http
+      protocol: TCP
+    {{- end }}
+    {{- if .Values.https.enabled }}
+    - name: https
+      port: {{ .Values.https.port }}
+      targetPort: https
+      protocol: TCP
+    {{- end }}
+    - name: management
+      port: {{ .Values.http.managementPort }}
+      targetPort: management
+      protocol: TCP

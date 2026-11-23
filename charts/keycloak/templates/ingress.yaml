@@ -1,0 +1,10 @@
+{{- $host := tpl (.Values.ingress.host | default "") . | default (include "keycloak.publicHost" .) }}
+{{- if .Values.ingress.enabled }}
+{{ include "keycloak.ingress" (dict "ctx" $ "name" (include "keycloak.fullname" .) "cfg" .Values.ingress "paths" .Values.ingress.paths "host" $host) }}
+{{- end }}
+{{- if .Values.ingress.admin.enabled }}
+{{- $admin := .Values.ingress.admin }}
+{{- $paths := $admin.paths | default (list (dict "path" (printf "%s/admin/" (include "keycloak.httpPath" .)) "pathType" "Prefix")) }}
+---
+{{ include "keycloak.ingress" (dict "ctx" $ "name" (include "keycloak.childName" (dict "ctx" . "suffix" "admin")) "cfg" $admin "paths" $paths "host" (tpl ($admin.host | default "") . | default $host)) }}
+{{- end }}

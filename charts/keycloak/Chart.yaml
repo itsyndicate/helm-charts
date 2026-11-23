@@ -1,0 +1,8 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak (Quarkus) on the official image as a StatefulSet with an external database
+type: application
+# Chart version, Semantic Versioning. Increment it on every change to the chart.
+version: 0.1.0
+# Keycloak release the default values were written for. The image tag defaults to it.
+appVersion: "26.8.2"

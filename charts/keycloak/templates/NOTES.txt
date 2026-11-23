@@ -1,0 +1,32 @@
+Keycloak {{ .Values.image.tag | default .Chart.AppVersion }} runs as StatefulSet {{ include "keycloak.fullname" . }} in namespace {{ .Release.Namespace }}.
+{{- with .Values.hostname.url }}
+
+Public URL: {{ tpl . $ }}
+{{- end }}
+
+Health and logs:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=keycloak
+  kubectl -n {{ .Release.Namespace }} logs {{ include "keycloak.fullname" . }}-0 -c keycloak
+  helm -n {{ .Release.Namespace }} test {{ .Release.Name }}
+{{- if and (not .Values.hostname.url) .Values.hostname.strict }}
+
+WARNING: hostname.url is empty and hostname.strict is true. Keycloak refuses to start: set hostname.url
+(e.g. https://id.example.com/) or hostname.strict=false.
+{{- end }}
+{{- $db := .Values.database }}
+{{- if not (or $db.host.value (dig "secretKeyRef" "key" "" $db.host) $db.url.value (dig "secretKeyRef" "key" "" $db.url)) }}
+
+WARNING: no database host. Set database.host or database.url (value or secretKeyRef).
+{{- end }}
+{{- if not (dig "secretKeyRef" "key" "" $db.password) }}
+
+WARNING: database.password.secretKeyRef is not set.
+{{- end }}
+{{- if not (dig "secretKeyRef" "key" "" .Values.bootstrapAdmin.password) }}
+
+NOTE: bootstrapAdmin.password is not set, so no temporary admin is created. Fine for an existing database; a new
+one has no admin user.
+{{- end }}
+
+Upgrading to another Keycloak version migrates the database schema one way and cannot run next to the old
+version: follow "Upgrading Keycloak" in the chart README.

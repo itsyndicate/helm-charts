@@ -1,0 +1,83 @@
+# AWS Load Balancer Controller with TLS ending at the ALB, all credentials from one existing Secret (synced by
+# External Secrets outside the chart), a theme JAR copied from an image, and a JVM flag.
+#   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-aws-alb.yaml
+
+fullnameOverride: dev-keycloak
+replicaCount: 1
+
+image:
+  tag: "26.8.2"
+  digest: sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+
+hostname:
+  url: https://id.example.com/
+  adminUrl: "{{ .Values.hostname.url }}"
+  strict: false
+proxy:
+  headers: xforwarded
+
+jvm:
+  # Java4Shell (CVE-2026-114938) mitigation for JDKs older than 21.0.13.1
+  jdkJavaOptions: -XX:-UseBASE64Intrinsics
+
+database:
+  host:
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_HOST}
+  database:
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_NAME}
+  username:
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_USER}
+  password:
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_PASSWORD}
+  schema:
+    value: public
+
+bootstrapAdmin:
+  password:
+    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_ADMIN_PASSWORD}
+
+cache:
+  nodeNameFromPod: true
+
+# Lands as /opt/keycloak/providers/example-theme.jar when the image has /usr/theme/example-theme/example-theme.jar.
+# A Flux image policy marker works on the image line.
+providers:
+  example-theme:
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/keycloak-themes:42 # {"$imagepolicy": "flux-system:keycloak-themes"}
+    source: /usr/theme/example-theme
+
+reloader:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 640Mi
+    ephemeral-storage: 50Mi
+  limits:
+    memory: 768Mi
+    ephemeral-storage: 2Gi
+
+nodeSelector:
+  tier: app
+  kubernetes.io/arch: amd64
+  karpenter.sh/capacity-type: on-demand
+podAnnotations:
+  karpenter.sh/do-not-disrupt: "true"
+
+service:
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /realms/master
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+
+ingress:
+  enabled: true
+  className: alb-apps
+  annotations:
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-east-1:123456789012:regional/webacl/example/00000000-0000-0000-0000-000000000000

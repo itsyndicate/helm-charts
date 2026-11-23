@@ -1,0 +1,17 @@
+{{- if and .Values.realmImport.enabled (not .Values.realmImport.existingConfigMap) }}
+{{- if not .Values.realmImport.realms }}
+{{- fail "realmImport.enabled: set realmImport.realms or realmImport.existingConfigMap" }}
+{{- end }}
+{{- /* A regular resource, not a hook: it exists before the post-install hook runs */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "keycloak.childName" (dict "ctx" . "suffix" "realms") }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+data:
+  {{- range $file, $realm := .Values.realmImport.realms }}
+  {{ $file | quote }}: |
+    {{- toPrettyJson $realm | nindent 4 }}
+  {{- end }}
+{{- end }}

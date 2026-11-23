@@ -1,0 +1,86 @@
+{{- if .Values.realmImport.enabled }}
+{{- $ri := .Values.realmImport }}
+{{- if not (dig "secretKeyRef" "key" "" .Values.bootstrapAdmin.password) }}
+{{- fail "realmImport.enabled needs bootstrapAdmin.password.secretKeyRef: the hook logs in with it" }}
+{{- end }}
+{{- if not (or $ri.image.tag $ri.image.digest) }}
+{{- fail "realmImport.image.tag: set the keycloak-config-cli build for your Keycloak version" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "keycloak.childName" (dict "ctx" . "suffix" "realm-import") }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: realm-import
+  annotations:
+    helm.sh/hook: {{ $ri.hooks }}
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: {{ $ri.deletePolicy }}
+spec:
+  backoffLimit: {{ $ri.backoffLimit }}
+  activeDeadlineSeconds: {{ $ri.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "keycloak.labels" . | nindent 8 }}
+        app.kubernetes.io/component: realm-import
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "keycloak.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: keycloak-config-cli
+          image: {{ include "keycloak.imageRef" $ri.image }}
+          imagePullPolicy: {{ $ri.image.pullPolicy }}
+          env:
+            - name: KEYCLOAK_URL
+              value: {{ include "keycloak.serviceUrl" . | quote }}
+            {{- include "keycloak.envVar" (dict "name" "KEYCLOAK_USER" "field" .Values.bootstrapAdmin.username "what" "bootstrapAdmin.username" "ctx" $) | trim | nindent 12 }}
+            {{- include "keycloak.envVar" (dict "name" "KEYCLOAK_PASSWORD" "field" .Values.bootstrapAdmin.password "what" "bootstrapAdmin.password" "ctx" $) | trim | nindent 12 }}
+            - name: KEYCLOAK_AVAILABILITYCHECK_ENABLED
+              value: "true"
+            - name: KEYCLOAK_AVAILABILITYCHECK_TIMEOUT
+              value: 300s
+            {{- if not .Values.http.enabled }}
+            - name: KEYCLOAK_SSLVERIFY
+              value: "false"
+            {{- end }}
+            - name: IMPORT_FILES_LOCATIONS
+              value: /config/*
+            - name: IMPORT_VARSUBSTITUTION_ENABLED
+              value: "true"
+            {{- with $ri.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $ri.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: realms
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: realms
+          configMap:
+            name: {{ $ri.existingConfigMap | default (include "keycloak.childName" (dict "ctx" . "suffix" "realms")) }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.emptyDirSizeLimits.tmp }}
+{{- end }}

@@ -1,0 +1,74 @@
+# Gateway API HTTPRoute and External Secrets Operator. Every secretKeyRef without a name points to the Secret of
+# the chart's ExternalSecret, which extracts one AWS Secrets Manager secret (a flat JSON object).
+#   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-gateway-api-eso.yaml
+
+replicaCount: 2
+
+hostname:
+  url: https://sso.example.com/
+proxy:
+  headers: xforwarded
+
+externalSecret:
+  enabled: true
+  dataFrom:
+    - extract:
+        key: myapp/prod/keycloak
+
+database:
+  host:
+    secretKeyRef: {key: DB_HOST}
+  database:
+    secretKeyRef: {key: DB_NAME}
+  username:
+    secretKeyRef: {key: DB_USER}
+  password:
+    secretKeyRef: {key: DB_PASSWORD}
+
+bootstrapAdmin:
+  password:
+    secretKeyRef: {key: ADMIN_PASSWORD}
+
+reloader:
+  enabled: true
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: public
+      namespace: gateway
+      sectionName: https
+  # hostnames default to the host of hostname.url
+  rules:
+    # Public paths go to the chart's Service (no backendRefs given)
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /realms/
+        - path:
+            type: PathPrefix
+            value: /resources/
+      timeouts:
+        request: 30s
+    # The bare host redirects to the account console
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /realms/example/account/
+            statusCode: 302
+
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: gateway
+  databaseTo:
+    - ipBlock:
+        cidr: 10.0.0.0/16
