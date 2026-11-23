@@ -1,7 +1,4 @@
 {{- if .Values.serviceMonitor.enabled }}
-{{- if not .Values.metrics.enabled }}
-{{- fail "serviceMonitor.enabled needs metrics.enabled" }}
-{{- end }}
 {{- $sm := .Values.serviceMonitor }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -19,17 +16,17 @@ spec:
       {{- include "keycloak.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: management
-      path: {{ include "keycloak.managementPath" . }}/metrics
+      path: {{ printf "%s/metrics" (include "keycloak.managementPath" .) | quote }}
       scheme: {{ include "keycloak.managementScheme" . | lower }}
       {{- if .Values.https.enabled }}
       tlsConfig:
         insecureSkipVerify: true
       {{- end }}
       {{- with $sm.interval }}
-      interval: {{ . }}
+      interval: {{ . | quote }}
       {{- end }}
       {{- with $sm.scrapeTimeout }}
-      scrapeTimeout: {{ . }}
+      scrapeTimeout: {{ . | quote }}
       {{- end }}
       {{- with $sm.relabelings }}
       relabelings:

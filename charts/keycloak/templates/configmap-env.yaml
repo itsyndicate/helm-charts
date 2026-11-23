@@ -1,8 +1,11 @@
 {{- /* Plain Keycloak options, mounted with envFrom. The container env (secrets, extraEnv) wins over these. */}}
+{{- /* The data as JSON: the ConfigMap renders it and checksum/config hashes it, so labels never roll the pods. */}}
+{{- define "keycloak.envData" -}}
+{{- /* Metrics are always on: the database check of /health/ready only exists while they are enabled */}}
 {{- $data := dict
   "KC_DB" (required "database.vendor is required" .Values.database.vendor)
   "KC_HEALTH_ENABLED" "true"
-  "KC_METRICS_ENABLED" (toString .Values.metrics.enabled)
+  "KC_METRICS_ENABLED" "true"
   "KC_HTTP_ENABLED" (toString .Values.http.enabled)
   "KC_HTTP_PORT" (toString .Values.http.port)
   "KC_HTTP_RELATIVE_PATH" .Values.http.relativePath
@@ -24,10 +27,15 @@
 {{- $_ := set $data "KC_HOSTNAME" (tpl . $) }}
 {{- end }}
 {{- with .Values.hostname.adminUrl }}
-{{- $_ := set $data "KC_HOSTNAME_ADMIN" (tpl . $) }}
+{{- /* Twice: adminUrl may point at hostname.url, which may be a template itself */}}
+{{- $_ := set $data "KC_HOSTNAME_ADMIN" (tpl (tpl . $) $) }}
 {{- end }}
 {{- with .Values.proxy.headers }}
 {{- $_ := set $data "KC_PROXY_HEADERS" . }}
+{{- end }}
+{{- /* Keycloak only accepts the option together with proxy-headers */}}
+{{- if and .Values.proxy.headers .Values.proxy.trustedAddresses }}
+{{- $_ := set $data "KC_PROXY_TRUSTED_ADDRESSES" .Values.proxy.trustedAddresses }}
 {{- end }}
 {{- $kubePing := and (eq .Values.cache.type "ispn") (eq .Values.cache.stack "kubernetes") }}
 {{- if eq .Values.cache.type "ispn" }}
@@ -46,8 +54,17 @@
 {{- with $append }}
 {{- $_ := set $data "JAVA_OPTS_APPEND" (join " " .) }}
 {{- end }}
+{{- /* Checked here, not in the schema: a schema error does not name the option */}}
+{{- $owned := list "db" "db-url" "db-url-host" "db-url-port" "db-url-database" "db-url-properties" "db-schema" "db-username" "hostname" "hostname-admin" "hostname-strict" "proxy-headers" "proxy-trusted-addresses" "http-enabled" "http-port" "https-port" "http-relative-path" "health-enabled" "metrics-enabled" "legacy-observability-interface" "cache" "cache-stack" "cache-embedded-node-name" "https-certificate-file" "https-certificate-key-file" }}
 {{- range $option, $value := .Values.config }}
-{{- $_ := set $data (printf "KC_%s" ($option | upper | replace "-" "_")) (toString $value) }}
+{{- if or (has $option $owned) (regexMatch "^(http-management-|bootstrap-admin-)" $option) }}
+{{- fail (printf "config.%s is not allowed: the chart sets this option through a dedicated value (see the comment of `config` in values.yaml)" $option) }}
+{{- else if regexMatch "(password|secret|-pass)$" $option }}
+{{- fail (printf "config.%s is not allowed: a secret must not go into a ConfigMap. Use extraEnv with a secretKeyRef, or a mounted config file" $option) }}
+{{- end }}
+{{- $_ := set $data (printf "KC_%s" ($option | upper | replace "-" "_")) (include "keycloak.toString" $value) }}
+{{- end }}
+{{- toJson $data -}}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap
@@ -56,6 +73,6 @@ metadata:
   labels:
     {{- include "keycloak.labels" . | nindent 4 }}
 data:
-  {{- range $key, $value := $data }}
+  {{- range $key, $value := include "keycloak.envData" . | fromJson }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}

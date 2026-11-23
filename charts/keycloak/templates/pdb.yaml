@@ -12,9 +12,12 @@ metadata:
     {{- include "keycloak.labels" . | nindent 4 }}
 spec:
   {{- if $hasMin }}
-  minAvailable: {{ $pdb.minAvailable }}
+  minAvailable: {{ $pdb.minAvailable | toJson }}
   {{- else }}
-  maxUnavailable: {{ $pdb.maxUnavailable }}
+  maxUnavailable: {{ $pdb.maxUnavailable | toJson }}
+  {{- end }}
+  {{- with $pdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
   {{- end }}
   selector:
     matchLabels:

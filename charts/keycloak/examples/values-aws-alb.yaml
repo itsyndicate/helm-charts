@@ -1,24 +1,35 @@
-# AWS Load Balancer Controller with TLS ending at the ALB, all credentials from one existing Secret (synced by
-# External Secrets outside the chart), a theme JAR copied from an image, and a JVM flag.
+# AWS, dev/staging-sized: two pods behind the AWS Load Balancer Controller with TLS at the ALB (ACM), credentials
+# from an existing Secret (here `keycloak-secrets`, e.g. synced by an ExternalSecret outside the chart), a theme
+# from an image, external-dns. Hosts, ARNs, subnets, CIDRs, class names and Secret keys are placeholders.
 #   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-aws-alb.yaml
 
 fullnameOverride: dev-keycloak
-replicaCount: 1
+# Two pods are the minimum that exercises clustering, the upgrade guard, a rolling restart and the
+# PodDisruptionBudget before production. One pod means downtime on every restart.
+replicaCount: 2
 
 image:
   tag: "26.8.2"
   digest: sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
 
 hostname:
-  url: https://id.example.com/
-  adminUrl: "{{ .Values.hostname.url }}"
-  strict: false
+  url: https://id.dev.example.com/
+  # The admin console answers on its own internal host: see ingress.admin
+  adminUrl: https://id-admin.dev.internal.example.com/
 proxy:
   headers: xforwarded
+  # The subnets of the two ALBs, the same CIDRs as networkPolicy.ingressFrom. Not the VPC CIDR: with the VPC CNI
+  # pod IPs come from the node subnets, and every peer in a trusted range can send forged X-Forwarded-* headers.
+  # An ALB appends to X-Forwarded-For and Keycloak reads the leftmost element, so the client address Keycloak
+  # records is still client-controlled.
+  trustedAddresses: 10.0.0.0/24,10.0.1.0/24
 
-jvm:
-  # Java4Shell (CVE-2026-114938) mitigation for JDKs older than 21.0.13.1
-  jdkJavaOptions: -XX:-UseBASE64Intrinsics
+config:
+  # Keep serving while the ALB takes the target out (chart default: 15s). Must stay below
+  # terminationGracePeriodSeconds (60) minus the shutdown-timeout (10s).
+  shutdown-delay: 30s
+
+# jvm.jdkJavaOptions: -XX:-UseBASE64Intrinsics is only needed on an image with a JDK older than 21.0.13.1
 
 database:
   host:
@@ -32,12 +43,10 @@ database:
   schema:
     value: public
 
+# Acts only on a new, empty database. Remove it once a permanent admin of the master realm exists.
 bootstrapAdmin:
   password:
     secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_ADMIN_PASSWORD}
-
-cache:
-  nodeNameFromPod: true
 
 # Lands as /opt/keycloak/providers/example-theme.jar when the image has /usr/theme/example-theme/example-theme.jar.
 # A Flux image policy marker works on the image line.
@@ -46,38 +55,90 @@ providers:
     image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/keycloak-themes:42 # {"$imagepolicy": "flux-system:keycloak-themes"}
     source: /usr/theme/example-theme
 
-reloader:
-  enabled: true
-
+# The floor for a small dev pod, not for load: 1280Mi is the minimum with kc.sh's default heap percentages (768Mi
+# was OOM-killed at boot). Production: values-production-ha.yaml.
 resources:
   requests:
-    cpu: 100m
-    memory: 640Mi
-    ephemeral-storage: 50Mi
+    cpu: 250m
+    memory: 1Gi
   limits:
-    memory: 768Mi
-    ephemeral-storage: 2Gi
+    memory: 1280Mi
 
 nodeSelector:
-  tier: app
   kubernetes.io/arch: amd64
-  karpenter.sh/capacity-type: on-demand
-podAnnotations:
-  karpenter.sh/do-not-disrupt: "true"
 
+# Health check of both target groups, on the traffic port
 service:
   annotations:
     alb.ingress.kubernetes.io/healthcheck-path: /realms/master
     alb.ingress.kubernetes.io/success-codes: "200"
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
 
+# Public ALB: the default public paths, and 403 for the master realm
 ingress:
   enabled: true
-  className: alb-apps
+  className: alb
   annotations:
+    external-dns.alpha.kubernetes.io/hostname: id.dev.example.com
+    alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
+    # Subnets of their own for the ALB, without nodes or pods
+    alb.ingress.kubernetes.io/subnets: subnet-0aaaaaaaaaaaaaaa1,subnet-0aaaaaaaaaaaaaaa2
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
-    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-east-1:123456789012:regional/webacl/example/00000000-0000-0000-0000-000000000000
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    alb.ingress.kubernetes.io/actions.deny-master: >-
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden"}}
+  # A list replaces the default whole, so the default paths are repeated
+  paths:
+    - path: /realms/master/
+      pathType: Prefix
+      backend:
+        service:
+          name: deny-master
+          port:
+            name: use-annotation
+    - path: /realms/
+      pathType: Prefix
+    - path: /resources/
+      pathType: Prefix
+    - path: /.well-known/
+      pathType: Prefix
+    - path: /robots.txt
+      pathType: Exact
+  # Internal ALB for the admin console; its host comes from hostname.adminUrl
+  admin:
+    enabled: true
+    # Placeholder: your internal ALB IngressClass
+    className: alb-internal
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: id-admin.dev.internal.example.com
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/subnets: subnet-0bbbbbbbbbbbbbbb1,subnet-0bbbbbbbbbbbbbbb2
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/11111111-1111-1111-1111-111111111111
+      alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    paths:
+      - path: /admin/
+        pathType: Prefix
+      - path: /realms/master/
+        pathType: Prefix
+      - path: /resources/
+        pathType: Prefix
+
+networkPolicy:
+  enabled: true
+  # target-type ip: the ALB nodes connect to the pod IP. Only the two ALB subnet ranges, which hold no pods or nodes.
+  ingressFrom:
+    - ipBlock:
+        cidr: 10.0.0.0/24 # subnets of the public ALB
+    - ipBlock:
+        cidr: 10.0.1.0/24 # subnets of the internal ALB
+  # Database subnets, on 5432 (database.port.value is empty)
+  databaseTo:
+    - ipBlock:
+        cidr: 10.0.32.0/20
+  # SMTP, identity brokering and other outbound calls need extraEgress: see values-production-ha.yaml

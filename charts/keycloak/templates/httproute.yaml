@@ -18,8 +18,8 @@
 {{- range $rule.filters }}
 {{- if eq .type "RequestRedirect" }}{{ $redirect = true }}{{ end }}
 {{- end }}
-{{- /* A RequestRedirect rule must not have backendRefs */}}
-{{- if not (or $rule.backendRefs $redirect) }}
+{{- /* A RequestRedirect rule must not have backendRefs; an explicit key, even [], is kept */}}
+{{- if not (or (hasKey $rule "backendRefs") $redirect) }}
 {{- $_ := set $rule "backendRefs" (list $backend) }}
 {{- end }}
 {{- $rules = append $rules $rule }}

@@ -5,6 +5,8 @@
 {{- if .Values.ingress.admin.enabled }}
 {{- $admin := .Values.ingress.admin }}
 {{- $paths := $admin.paths | default (list (dict "path" (printf "%s/admin/" (include "keycloak.httpPath" .)) "pathType" "Prefix")) }}
+{{- /* Keycloak redirects the console to hostname.adminUrl, so that host needs the rule */}}
+{{- $adminHost := tpl ($admin.host | default "") . | default (include "keycloak.urlHost" (tpl (tpl (.Values.hostname.adminUrl | default "") .) .)) | default $host }}
 ---
-{{ include "keycloak.ingress" (dict "ctx" $ "name" (include "keycloak.childName" (dict "ctx" . "suffix" "admin")) "cfg" $admin "paths" $paths "host" (tpl ($admin.host | default "") . | default $host)) }}
+{{ include "keycloak.ingress" (dict "ctx" $ "name" (include "keycloak.childName" (dict "ctx" . "suffix" "admin")) "cfg" $admin "paths" $paths "host" $adminHost) }}
 {{- end }}

@@ -4,6 +4,13 @@
 {{- if and .Values.https.enabled (not .Values.https.certificateSecret) }}
 {{- fail "https.enabled needs https.certificateSecret" }}
 {{- end }}
+{{- if gt (len (include "keycloak.fullname" .)) 52 }}
+{{- fail (printf "the StatefulSet name %q is longer than 52 characters, so its pods cannot be created (their controller-revision-hash label <name>-<hash> must fit 63): shorten the release name or set fullnameOverride" (include "keycloak.fullname" .)) }}
+{{- end }}
+{{- if .Values.hostname.strict }}
+{{- $_ := required "hostname.url is required while hostname.strict is true: set the public URL, e.g. https://id.example.com/ (Keycloak refuses to start without it)" .Values.hostname.url }}
+{{- end }}
+{{- include "keycloak.upgradeGuard" (dict "live" (lookup "apps/v1" "StatefulSet" .Release.Namespace (include "keycloak.fullname" .)) "ctx" .) }}
 {{- $mgmtPath := include "keycloak.managementPath" . }}
 {{- $mgmtScheme := include "keycloak.managementScheme" . }}
 {{- $targets := list }}
@@ -11,7 +18,12 @@
 {{- $targets = append $targets ($p.target | default "providers") }}
 {{- end }}
 {{- $targets = $targets | uniq | sortAlpha }}
+{{- if and .Values.optimized (has "providers" $targets) }}
+{{- fail "optimized=true cannot be combined with providers entries of target \"providers\" (the default): an optimized image only loads the providers it was built with, and the emptyDir at /opt/keycloak/providers hides them. Build the JARs into the image, or set optimized=false." }}
+{{- end }}
 {{- $env := include "keycloak.containerEnv" . | trim }}
+{{- $db := .Values.database }}
+{{- $_ := required "database.host or database.url is required (value or secretKeyRef)" (coalesce $db.host.value (dig "secretKeyRef" "key" "" $db.host) $db.url.value (dig "secretKeyRef" "key" "" $db.url)) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -29,7 +41,7 @@ spec:
   {{- if not (kindIs "invalid" .Values.revisionHistoryLimit) }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- end }}
-  serviceName: {{ include "keycloak.headlessName" . }}
+  serviceName: {{ include "keycloak.headlessName" . | quote }}
   podManagementPolicy: {{ .Values.podManagementPolicy }}
   {{- with .Values.updateStrategy }}
   updateStrategy:
@@ -41,22 +53,19 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap-env.yaml") . | sha256sum }}
+        {{- /* Hashes of values only, never of rendered manifests: their labels change with the chart version */}}
+        checksum/config: {{ include "keycloak.envData" . | sha256sum }}
         {{- if .Values.externalSecret.enabled }}
         {{- /* The ExternalSecret spec only; changes to the Secret's data are Reloader's job */}}
-        checksum/secret: {{ include (print $.Template.BasePath "/externalsecret.yaml") . | sha256sum }}
+        checksum/secret: {{ pick .Values.externalSecret "name" "secretStoreRef" "dataFrom" "data" "template" | toJson | sha256sum }}
         {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "keycloak.labels" . | nindent 8 }}
-        app.kubernetes.io/component: keycloak
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "keycloak.podLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "keycloak.serviceAccountName" . }}
+      serviceAccountName: {{ include "keycloak.serviceAccountName" . | quote }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- /* Service env vars (<SVC>_PORT, ...) would only add noise next to the KC_* options */}}
       enableServiceLinks: false
@@ -65,7 +74,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
@@ -75,9 +84,9 @@ spec:
       {{- if or (not .Values.optimized) .Values.providers .Values.initContainers }}
       initContainers:
         {{- if not .Values.optimized }}
-        {{- /* A non-optimized start re-augments into lib/quarkus and fails on an empty dir: seed it from the image */}}
+        {{- /* A non-optimized start re-augments into lib/quarkus and fails on an empty dir: keep a copy of the image's */}}
         - name: seed-quarkus
-          image: {{ include "keycloak.image" . }}
+          image: {{ include "keycloak.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/bin/sh", "-c", "cp -R /opt/keycloak/lib/quarkus/. /seed/"]
           {{- with .Values.securityContext }}
@@ -89,18 +98,18 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-            - name: quarkus
+            - name: quarkus-seed
               mountPath: /seed
         {{- end }}
         {{- range $name, $p := .Values.providers }}
         - name: provider-{{ $name }}
-          image: {{ required (printf "providers.%s.image is required" $name) $p.image }}
+          image: {{ required (printf "providers.%s.image is required" $name) $p.image | quote }}
           imagePullPolicy: {{ $p.imagePullPolicy | default "IfNotPresent" }}
           {{- if $p.command }}
           command:
             {{- toYaml $p.command | nindent 12 }}
           {{- else }}
-          command: ["sh", "-c", "cp -R \"$0\"/. /target/", {{ required (printf "providers.%s.source is required" $name) $p.source | quote }}]
+          command: ["sh", "-c", "cp -R -- \"$0\"/. /target/", {{ required (printf "providers.%s.source is required" $name) $p.source | quote }}]
           {{- end }}
           {{- with $.Values.securityContext }}
           securityContext:
@@ -120,8 +129,13 @@ spec:
       {{- end }}
       containers:
         - name: keycloak
-          image: {{ include "keycloak.image" . }}
+          image: {{ include "keycloak.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if not .Values.optimized }}
+          {{- /* Re-seed lib/quarkus on every container start: a start killed during the re-augmentation leaves it
+          half-written, and init containers do not run again when only the container restarts */}}
+          command: ["/bin/sh", "-c", "cp -R /seed/. /opt/keycloak/lib/quarkus/ && exec /opt/keycloak/bin/kc.sh \"$@\"", "kc"]
+          {{- end }}
           args:
             - start
             {{- if .Values.optimized }}
@@ -159,10 +173,12 @@ spec:
           {{- if $cfg.enabled }}
           {{ $probe }}:
             httpGet:
-              path: {{ $mgmtPath }}/health/{{ $endpoint }}
+              path: {{ printf "%s/health/%s" $mgmtPath $endpoint | quote }}
               port: management
               scheme: {{ $mgmtScheme }}
-            {{- toYaml (omit $cfg "enabled") | nindent 12 }}
+            {{- with omit $cfg "enabled" }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           {{- end }}
           {{- with .Values.resources }}
@@ -181,10 +197,14 @@ spec:
             {{- if not .Values.optimized }}
             - name: quarkus
               mountPath: /opt/keycloak/lib/quarkus
+            - name: quarkus-seed
+              mountPath: /seed
+              readOnly: true
             {{- end }}
             {{- range $targets }}
             - name: {{ . }}
               mountPath: /opt/keycloak/{{ . }}
+              readOnly: true
             {{- end }}
             {{- if .Values.https.enabled }}
             - name: tls
@@ -224,24 +244,27 @@ spec:
       volumes:
         - name: tmp
           emptyDir:
-            sizeLimit: {{ .Values.emptyDirSizeLimits.tmp }}
+            sizeLimit: {{ .Values.emptyDirSizeLimits.tmp | toJson }}
         - name: data
           emptyDir:
-            sizeLimit: {{ .Values.emptyDirSizeLimits.data }}
+            sizeLimit: {{ .Values.emptyDirSizeLimits.data | toJson }}
         {{- if not .Values.optimized }}
         - name: quarkus
           emptyDir:
-            sizeLimit: {{ .Values.emptyDirSizeLimits.quarkus }}
+            sizeLimit: {{ .Values.emptyDirSizeLimits.quarkus | toJson }}
+        - name: quarkus-seed
+          emptyDir:
+            sizeLimit: {{ .Values.emptyDirSizeLimits.quarkus | toJson }}
         {{- end }}
         {{- range $targets }}
         - name: {{ . }}
           emptyDir:
-            sizeLimit: {{ $.Values.emptyDirSizeLimits.providers }}
+            sizeLimit: {{ $.Values.emptyDirSizeLimits.providers | toJson }}
         {{- end }}
         {{- if .Values.https.enabled }}
         - name: tls
           secret:
-            secretName: {{ .Values.https.certificateSecret }}
+            secretName: {{ .Values.https.certificateSecret | quote }}
             defaultMode: 288 # 0440: readable through fsGroup by the keycloak user
         {{- end }}
         {{- with .Values.extraVolumes }}

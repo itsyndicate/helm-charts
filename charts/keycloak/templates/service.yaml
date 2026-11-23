@@ -18,13 +18,13 @@ spec:
   ports:
     {{- if .Values.http.enabled }}
     - name: http
-      port: {{ .Values.http.port }}
+      port: {{ .Values.service.port | default .Values.http.port }}
       targetPort: http
       protocol: TCP
     {{- end }}
     {{- if .Values.https.enabled }}
     - name: https
-      port: {{ .Values.https.port }}
+      port: {{ .Values.service.httpsPort | default .Values.https.port }}
       targetPort: https
       protocol: TCP
     {{- end }}

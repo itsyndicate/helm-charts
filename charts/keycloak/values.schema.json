@@ -3,6 +3,12 @@
   "title": "keycloak chart values",
   "type": "object",
   "additionalProperties": false,
+  "required": [
+    "image", "hostname", "http", "https", "proxy", "jvm", "database", "bootstrapAdmin", "cache", "replicaCount",
+    "startupProbe", "livenessProbe", "readinessProbe", "serviceAccount", "emptyDirSizeLimits", "service", "ingress",
+    "httpRoute", "networkPolicy", "externalSecret", "reloader", "serviceMonitor", "podDisruptionBudget", "autoscaling",
+    "realmImport", "tests"
+  ],
   "definitions": {
     "stringMap": {
       "type": "object",
@@ -56,8 +62,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "requests": { "type": "object", "additionalProperties": { "type": ["string", "integer"] } },
-        "limits": { "type": "object", "additionalProperties": { "type": ["string", "integer"] } },
+        "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
+        "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
         "claims": { "$ref": "#/definitions/objectList" }
       }
     },
@@ -79,8 +85,9 @@
       "additionalProperties": false,
       "required": ["path"],
       "properties": {
-        "path": { "$ref": "#/definitions/path" },
-        "pathType": { "enum": ["Prefix", "Exact", "ImplementationSpecific"] }
+        "path": { "type": "string", "pattern": "^/\\S*$" },
+        "pathType": { "enum": ["Prefix", "Exact", "ImplementationSpecific"] },
+        "backend": { "type": "object" }
       }
     },
     "ingressTls": {
@@ -97,9 +104,15 @@
   },
   "properties": {
     "global": { "type": "object" },
-    "nameOverride": { "type": "string" },
-    "fullnameOverride": { "type": "string" },
-    "commonLabels": { "$ref": "#/definitions/stringMap" },
+    "nameOverride": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$" },
+    "fullnameOverride": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$" },
+    "commonLabels": {
+      "type": "object",
+      "propertyNames": {
+        "not": { "enum": ["app.kubernetes.io/name", "app.kubernetes.io/instance", "app.kubernetes.io/component", "app.kubernetes.io/version", "app.kubernetes.io/managed-by", "helm.sh/chart"] }
+      },
+      "additionalProperties": { "type": "string" }
+    },
     "image": { "$ref": "#/definitions/image" },
     "imagePullSecrets": { "$ref": "#/definitions/objectList" },
     "optimized": { "type": "boolean" },
@@ -137,17 +150,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "headers": { "enum": ["", "xforwarded", "forwarded"] }
-      }
-    },
-    "metrics": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" }
+        "headers": { "enum": ["", "xforwarded", "forwarded"] },
+        "trustedAddresses": { "type": "string" }
       }
     },
     "config": {
+      "description": "Options with a dedicated chart value and secret-bearing options are rejected by templates/configmap-env.yaml, which can name the option",
       "type": "object",
       "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$" },
       "additionalProperties": { "type": ["string", "number", "boolean"] }
@@ -180,7 +188,15 @@
       "additionalProperties": false,
       "properties": {
         "username": { "$ref": "#/definitions/source" },
-        "password": { "$ref": "#/definitions/secretSource" }
+        "password": { "$ref": "#/definitions/secretSource" },
+        "client": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "$ref": "#/definitions/source" },
+            "secret": { "$ref": "#/definitions/secretSource" }
+          }
+        }
       }
     },
     "cache": {
@@ -188,7 +204,7 @@
       "additionalProperties": false,
       "properties": {
         "type": { "enum": ["ispn", "local"] },
-        "stack": { "type": "string", "minLength": 1 },
+        "stack": { "enum": ["jdbc-ping", "kubernetes", "jdbc-ping-udp", "tcp", "udp", "ec2", "azure", "google"] },
         "nodeNameFromPod": { "type": "boolean" }
       }
     },
@@ -211,6 +227,7 @@
     "replicaCount": { "type": "integer", "minimum": 0 },
     "revisionHistoryLimit": { "type": ["integer", "null"], "minimum": 0 },
     "podManagementPolicy": { "enum": ["Parallel", "OrderedReady"] },
+    "upgradeGuard": { "type": "boolean" },
     "updateStrategy": {
       "type": "object",
       "additionalProperties": false,
@@ -230,7 +247,7 @@
       "additionalProperties": false,
       "properties": {
         "create": { "type": "boolean" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "pattern": "^([a-z0-9]([-.a-z0-9]*[a-z0-9])?)?$" },
         "annotations": { "$ref": "#/definitions/stringMap" },
         "automountServiceAccountToken": { "type": "boolean" }
       }
@@ -252,8 +269,16 @@
       "additionalProperties": false,
       "properties": {
         "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "anyOf": [{ "$ref": "#/definitions/port" }, { "enum": [""] }] },
+        "httpsPort": { "anyOf": [{ "$ref": "#/definitions/port" }, { "enum": [""] }] },
         "annotations": { "$ref": "#/definitions/stringMap" },
-        "labels": { "$ref": "#/definitions/stringMap" }
+        "labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "propertyNames": {
+            "not": { "enum": ["app.kubernetes.io/name", "app.kubernetes.io/instance", "app.kubernetes.io/component", "app.kubernetes.io/version", "app.kubernetes.io/managed-by", "helm.sh/chart"] }
+          }
+        }
       }
     },
     "ingress": {
@@ -321,7 +346,8 @@
           }
         },
         "dataFrom": { "$ref": "#/definitions/objectList" },
-        "data": { "$ref": "#/definitions/objectList" }
+        "data": { "$ref": "#/definitions/objectList" },
+        "template": { "type": "object" }
       }
     },
     "reloader": {
@@ -350,7 +376,8 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "maxUnavailable": { "type": ["integer", "string", "null"] },
-        "minAvailable": { "type": ["integer", "string", "null"] }
+        "minAvailable": { "type": ["integer", "string", "null"] },
+        "unhealthyPodEvictionPolicy": { "enum": ["", "AlwaysAllow", "IfHealthyBudget"] }
       }
     },
     "autoscaling": {
@@ -361,6 +388,7 @@
         "minReplicas": { "type": "integer", "minimum": 1 },
         "maxReplicas": { "type": "integer", "minimum": 1 },
         "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1 },
+        "targetCPUAverageValue": { "type": ["string", "number"] },
         "behavior": { "type": "object" }
       }
     },
@@ -376,7 +404,13 @@
     "tolerations": { "$ref": "#/definitions/objectList" },
     "priorityClassName": { "type": "string" },
     "podAnnotations": { "$ref": "#/definitions/stringMap" },
-    "podLabels": { "$ref": "#/definitions/stringMap" },
+    "podLabels": {
+      "type": "object",
+      "propertyNames": {
+        "not": { "enum": ["app.kubernetes.io/name", "app.kubernetes.io/instance", "app.kubernetes.io/component", "app.kubernetes.io/version", "app.kubernetes.io/managed-by", "helm.sh/chart"] }
+      },
+      "additionalProperties": { "type": "string" }
+    },
     "extraEnv": { "$ref": "#/definitions/objectList" },
     "extraEnvFrom": { "$ref": "#/definitions/objectList" },
     "extraVolumes": { "$ref": "#/definitions/objectList" },
@@ -390,10 +424,32 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "image": { "$ref": "#/definitions/image" },
-        "realms": { "type": "object", "additionalProperties": { "type": "object" } },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clientId": { "$ref": "#/definitions/source" },
+            "clientSecret": { "$ref": "#/definitions/secretSource" },
+            "username": { "$ref": "#/definitions/source" },
+            "password": { "$ref": "#/definitions/secretSource" }
+          }
+        },
+        "serviceAccountName": { "type": "string" },
+        "realms": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[-._a-zA-Z0-9]+$" },
+          "additionalProperties": { "type": "object" }
+        },
         "existingConfigMap": { "type": "string" },
-        "hooks": { "type": "string", "minLength": 1 },
-        "deletePolicy": { "type": "string" },
+        "varSubstitution": { "type": "boolean" },
+        "hooks": {
+          "type": "string",
+          "pattern": "^(pre|post)-(install|upgrade|rollback|delete)( *, *(pre|post)-(install|upgrade|rollback|delete))*$"
+        },
+        "deletePolicy": {
+          "type": "string",
+          "pattern": "^((before-hook-creation|hook-succeeded|hook-failed)( *, *(before-hook-creation|hook-succeeded|hook-failed))*)?$"
+        },
         "backoffLimit": { "type": "integer", "minimum": 0 },
         "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
         "extraEnv": { "$ref": "#/definitions/objectList" },
