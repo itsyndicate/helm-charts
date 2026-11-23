@@ -42,9 +42,9 @@ database:
   database:
     value: keycloak
   username:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_USER}
+    secretKeyRef: {name: keycloak-credentials, key: db_username}
   password:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_PASSWORD}
+    secretKeyRef: {name: keycloak-credentials, key: db_password}
 ```
 
 - Give `hostname.url` as a full `https://` URL, not a bare host name. With it, plain-HTTP calls inside the cluster (the realm-import hook, `helm test`) also work from pod IPs outside RFC 1918, such as EKS pods in 100.64.0.0/10. Without it they got a 403.
@@ -100,13 +100,13 @@ Each database field takes a plain `value` or a `secretKeyRef: {name, key}`; the 
 ```yaml
 database:
   host:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_HOST}
+    secretKeyRef: {name: keycloak-credentials, key: db_host}
   database:
     value: keycloak
   username:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_USER}
+    secretKeyRef: {name: keycloak-credentials, key: db_username}
   password:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_PASSWORD}
+    secretKeyRef: {name: keycloak-credentials, key: db_password}
 ```
 
 Name an existing Secret, as above, when something outside the chart already syncs it. A `secretKeyRef` without `name` points to the Secret of the chart's own ExternalSecret (`externalSecret.enabled`), called `<fullname>-secrets` unless `externalSecret.name` is set. That name must be free in the namespace: Helm does not adopt an ExternalSecret or Secret that already exists.
@@ -135,8 +135,8 @@ externalSecret:
     engineVersion: v2
     data:
       keycloak.conf: |
-        db-username={{ .KEYCLOAK_DB_USER | replace "\\" "\\\\" | replace "$" "$$" }}
-        db-password={{ .KEYCLOAK_DB_PASSWORD | replace "\\" "\\\\" | replace "$" "$$" }}
+        db-username={{ .db_username | replace "\\" "\\\\" | replace "$" "$$" }}
+        db-password={{ .db_password | replace "\\" "\\\\" | replace "$" "$$" }}
 
 extraEnv:
   - name: KC_CONFIG_FILE
@@ -200,7 +200,7 @@ Flux `valuesFrom` layers and several `-f` files merge maps key by key and replac
 ```yaml
 providers:
   example-theme:
-    source: /usr/theme/example-theme
+    source: /theme
 config:
   log-level: INFO
 ```
@@ -208,7 +208,7 @@ config:
 ```yaml
 providers:
   example-theme:
-    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/keycloak-themes:42 # {"$imagepolicy": "flux-system:keycloak-themes"}
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-theme:1.0.0 # {"$imagepolicy": "flux-system:my-theme"}
 config:
   shutdown-delay: 30s
   log-console-output: null
@@ -432,7 +432,7 @@ realmImport:
     clientId:
       value: realm-import
     clientSecret:
-      secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_REALM_IMPORT_CLIENT_SECRET}
+      secretKeyRef: {name: keycloak-credentials, key: realm_import_client_secret}
   realms:
     customers.json:
       realm: customers
@@ -579,7 +579,7 @@ A shortcut also works at API level: point `realmImport.auth` at the id and Secre
 | https.port | int | `8443` | Container port of https (KC_HTTPS_PORT). The Service port is `service.httpsPort`. |
 | jvm | object | `{"javaOptsAppend":"","jdkJavaOptions":""}` | JVM options. Never set JAVA_OPTS: it replaces the kc.sh defaults, including the heap `-XX:MaxRAMPercentage=70`. |
 | jvm.javaOptsAppend | string | `""` | JAVA_OPTS_APPEND, appended by kc.sh after its defaults. With `cache.stack: kubernetes` the chart prepends `-Djgroups.dns.query=<headless>.<namespace>.svc.cluster.local`; another `-Djgroups.dns.query` here wins, which a cluster domain other than `cluster.local` needs. |
-| jvm.jdkJavaOptions | string | `""` | JDK_JAVA_OPTIONS, read by the java launcher itself (log line `NOTE: Picked up JDK_JAVA_OPTIONS`). E.g. `-XX:-UseBASE64Intrinsics` (CVE-2026-114938), only needed on images with a JDK older than 21.0.13.1. |
+| jvm.jdkJavaOptions | string | `""` | JDK_JAVA_OPTIONS, read by the java launcher itself (log line `NOTE: Picked up JDK_JAVA_OPTIONS`). E.g. `-Djava.net.preferIPv4Stack=true`. |
 | optimized | bool | `false` | Pass `--optimized` to `kc.sh start`. Only for images pre-built with `kc.sh build`; the stock image is not. 26.8.2 refuses to start (exit code 2) when a build-time option differs from the build, so build the image with the same `db`, `features`, `http-relative-path`, `http-management-relative-path`, `health-enabled=true` and `metrics-enabled=true`, and with every build-time option you set through `config`. The `cache*` options are not build-time. Not possible together with `providers` entries of `target: providers`. |
 | proxy | object | `{"headers":"","trustedAddresses":""}` | Reverse proxy headers |
 | proxy.headers | string | `""` | Which proxy headers to trust (KC_PROXY_HEADERS): `xforwarded`, `forwarded` or empty for none. Set it only when every request comes through the proxy, otherwise clients can spoof their address and scheme. Empty behind a TLS-terminating load balancer (an https `hostname.url`): Keycloak logs a "Likely misconfiguration" warning and records the load balancer's address as the client. |

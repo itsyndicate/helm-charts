@@ -140,7 +140,7 @@ config:
 # @section -- Keycloak
 jvm:
   # -- JDK_JAVA_OPTIONS, read by the java launcher itself (log line `NOTE: Picked up JDK_JAVA_OPTIONS`).
-  # E.g. `-XX:-UseBASE64Intrinsics` (CVE-2026-114938), only needed on images with a JDK older than 21.0.13.1.
+  # E.g. `-Djava.net.preferIPv4Stack=true`.
   # @section -- Keycloak
   jdkJavaOptions: ""
   # -- JAVA_OPTS_APPEND, appended by kc.sh after its defaults. With `cache.stack: kubernetes` the chart prepends
@@ -259,9 +259,9 @@ cache:
 # @section -- Providers
 providers: {}
 #  example-theme:
-#    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/keycloak-themes:42 # {"$imagepolicy": "flux-system:keycloak-themes"}
+#    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-theme:1.0.0 # {"$imagepolicy": "flux-system:my-theme"}
 #    imagePullPolicy: IfNotPresent
-#    source: /usr/theme/example-theme
+#    source: /theme
 #    target: providers
 #    command: []
 # -- Resources of the init containers the chart renders (the lib/quarkus seed and the providers)

@@ -1,9 +1,8 @@
 # AWS, dev/staging-sized: two pods behind the AWS Load Balancer Controller with TLS at the ALB (ACM), credentials
-# from an existing Secret (here `keycloak-secrets`, e.g. synced by an ExternalSecret outside the chart), a theme
+# from an existing Secret (here `keycloak-credentials`, e.g. synced by an ExternalSecret outside the chart), a theme
 # from an image, external-dns. Hosts, ARNs, subnets, CIDRs, class names and Secret keys are placeholders.
 #   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-aws-alb.yaml
 
-fullnameOverride: dev-keycloak
 # Two pods are the minimum that exercises clustering, the upgrade guard, a rolling restart and the
 # PodDisruptionBudget before production. One pod means downtime on every restart.
 replicaCount: 2
@@ -29,31 +28,29 @@ config:
   # terminationGracePeriodSeconds (60) minus the shutdown-timeout (10s).
   shutdown-delay: 30s
 
-# jvm.jdkJavaOptions: -XX:-UseBASE64Intrinsics is only needed on an image with a JDK older than 21.0.13.1
-
 database:
   host:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_HOST}
+    secretKeyRef: {name: keycloak-credentials, key: db_host}
   database:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_NAME}
+    secretKeyRef: {name: keycloak-credentials, key: db_name}
   username:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_USER}
+    secretKeyRef: {name: keycloak-credentials, key: db_username}
   password:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_PASSWORD}
+    secretKeyRef: {name: keycloak-credentials, key: db_password}
   schema:
     value: public
 
 # Acts only on a new, empty database. Remove it once a permanent admin of the master realm exists.
 bootstrapAdmin:
   password:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_ADMIN_PASSWORD}
+    secretKeyRef: {name: keycloak-credentials, key: admin_password}
 
-# Lands as /opt/keycloak/providers/example-theme.jar when the image has /usr/theme/example-theme/example-theme.jar.
+# Lands as /opt/keycloak/providers/example-theme.jar when the image has /theme/example-theme.jar.
 # A Flux image policy marker works on the image line.
 providers:
   example-theme:
-    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/keycloak-themes:42 # {"$imagepolicy": "flux-system:keycloak-themes"}
-    source: /usr/theme/example-theme
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-theme:1.0.0 # {"$imagepolicy": "flux-system:my-theme"}
+    source: /theme
 
 # The floor for a small dev pod, not for load: 1280Mi is the minimum with kc.sh's default heap percentages (768Mi
 # was OOM-killed at boot). Production: values-production-ha.yaml.

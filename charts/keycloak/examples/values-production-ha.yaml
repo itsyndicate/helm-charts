@@ -1,5 +1,5 @@
 # AWS, production, HA: 3 to 6 pods (HPA) behind the AWS Load Balancer Controller, the admin console on an internal
-# ALB, credentials from an existing Secret (here `keycloak-secrets`), NetworkPolicy, PodDisruptionBudget and the
+# ALB, credentials from an existing Secret (here `keycloak-credentials`), NetworkPolicy, PodDisruptionBudget and the
 # realm-import hook. Hosts, ARNs, subnets, CIDRs, class names and Secret keys are placeholders. Prove it on a
 # staging environment of the same topology first (docs/migrating-from-bitnami.md has a rehearsal checklist).
 #   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-production-ha.yaml
@@ -36,13 +36,13 @@ config:
 
 database:
   host:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_HOST}
+    secretKeyRef: {name: keycloak-credentials, key: db_host}
   database:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_NAME}
+    secretKeyRef: {name: keycloak-credentials, key: db_name}
   username:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_USER}
+    secretKeyRef: {name: keycloak-credentials, key: db_username}
   password:
-    secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_DB_PASSWORD}
+    secretKeyRef: {name: keycloak-credentials, key: db_password}
   urlProperties: "?sslmode=require"
 
 # No bootstrapAdmin: it only acts on a new, empty database
@@ -190,7 +190,7 @@ realmImport:
     clientId:
       value: realm-import
     clientSecret:
-      secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_REALM_IMPORT_CLIENT_SECRET}
+      secretKeyRef: {name: keycloak-credentials, key: realm_import_client_secret}
   realms:
     example.json:
       realm: example
