@@ -81,7 +81,7 @@ So 300 s is not enough for 3 replicas behind an ALB, and 10 minutes is not enoug
 
 | Deploy tool | Default wait | Set |
 |---|---|---|
-| Flux `HelmRelease` | `spec.timeout: 5m`; no remediation retries | `spec.timeout` from the formula, for example `15m` for 6 replicas |
+| Flux `HelmRelease` | `spec.timeout: 5m`; no remediation retries | `spec.timeout` from the formula, for example `15m` for 6 replicas. `spec.upgrade.timeout` and `spec.install.timeout` win over it when the HelmRelease sets them: raise those instead |
 | A CI job running `helm upgrade --install --wait --timeout 10m` | What the job passes | The value from the formula. By the estimates above `10m` is enough for 3 to 4 replicas behind an ALB |
 | Terraform `helm_release` | `wait = true`, `timeout = 300`, `atomic = false` | `timeout`. A wrapper module that does not expose `timeout` leaves the 300 s |
 
@@ -145,7 +145,8 @@ flux reconcile helmrelease <name> -n <hr-namespace>
 
    ```yaml
    spec:
-     # longer than the migration measured in the rehearsal, plus one boot
+     # longer than the migration measured in the rehearsal, plus one boot.
+     # spec.upgrade.timeout, if the HelmRelease sets it, wins over this: raise that one instead
      timeout: 45m
      upgrade:
        # no realm import inside the upgrade: a failed hook would fail the release

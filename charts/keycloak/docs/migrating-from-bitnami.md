@@ -130,7 +130,7 @@ What each answer decides:
 | Bitnami chart | This chart | Checked |
 |---|---|---|
 | `image` `bitnami/keycloak:26.1.4-debian-12-r0` | `image.repository: quay.io/keycloak/keycloak`, `image.tag` (required), `image.digest` | Source |
-| `replicaCount`, `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `podAnnotations`, `podLabels`, `resources` | The same keys. `resources` defaults to 1536Mi here; Bitnami uses a preset | Source |
+| `replicaCount`, `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `podAnnotations`, `podLabels`, `resources` | The same keys. `resources` defaults to 1536Mi here; Bitnami uses a preset. A memory limit below `1280Mi` carried over from the Bitnami release (for example `768Mi`) must be raised: see [Traps](#traps) | Source; the OOM: tested |
 | `externalDatabase.host`, `.port`, `.database`, `.user`, `.existingSecret` with `existingSecret*Key` (`KEYCLOAK_DATABASE_*`) | `database.host`, `.port`, `.database`, `.username`, `.password`, each as `value` or `secretKeyRef` | Source |
 | The JDBC URL the Bitnami image builds: `jdbc:.../NAME?currentSchema=<KEYCLOAK_DATABASE_SCHEMA>&<KEYCLOAK_JDBC_PARAMS>`, schema `public` by default | `database.schema` for the schema; `database.urlProperties` for the parameters, with a leading `?` | Tested: a missed schema gives a new, empty one |
 | `auth.adminUser`, `auth.existingSecret` (`KC_BOOTSTRAP_ADMIN_*`) | Nothing. `bootstrapAdmin` is for a new database only | Source |
@@ -165,6 +165,8 @@ What each answer decides:
 - **Admin API clients after the upgrade to 26.8.2.** A client that existed before has no `kc-admin-api` scope and gets 401 from the Admin API until you add it (tested: 401 before, 200 after). This includes a client used in `realmImport.auth`. `username` and `password` are not affected.
 - **The realm import on existing realms.** `create-realm` lets the hook's client manage only the realms it created itself. Every realm of the migrated database was created by someone else: the client also needs the `<realm>-realm` client roles of each realm it imports (see "Hooks" in the README).
 - **The `metrics-listener` event listener** comes with the Bitnami image only. Tested: a realm that still lists it keeps working after the cut-over (logins answer 200), but Keycloak logs two ERROR records per event: `KC-SERVICES0083: Event listener 'metrics-listener' registered, but provider not found`. Removing it afterwards through the Admin API works. So this is clean-up, not a precondition; do it before or after.
+- **The memory limit.** A limit that served the Bitnami image is not enough for the official one: with `768Mi` it was OOM-killed at boot. `1280Mi` is the minimum with kc.sh's default heap percentages, `1536Mi` the chart default ([lab-measurements.md](lab-measurements.md#memory)). Check every values layer that sets `resources`, since an overlay replaces the chart default.
+- **The HelmRelease timeouts.** `spec.upgrade.timeout` and `spec.install.timeout` win over `spec.timeout`. If the live HelmRelease sets them (for example `10m`), raising only `spec.timeout` leaves the cut-over to fail on them during the migration.
 - **The theme image** was read by uid 1001 and is now read by uid 1000.
 - **The load balancer.** If the old release owns the Ingress and the release is removed, the load balancer is deleted and the new one gets another DNS name. external-dns follows, but clients wait for the DNS TTL.
 - **Bitnami's NetworkPolicy and PodDisruptionBudget** are on by default and are removed with the old release. This chart's NetworkPolicy is off by default.
@@ -187,7 +189,7 @@ The Flux fields are those of the [Flux runbook](upgrading.md#runbook-flux); read
 
 3. **Back up the database** (RDS snapshot, as in the runbook).
 
-4. **Replace the release** with `replicaCount: 1`, a long `spec.timeout` and the test off. Choose one way in the rehearsal and keep to it:
+4. **Replace the release** with `replicaCount: 1`, a long timeout and the test off. The timeout is `spec.timeout`, unless the HelmRelease sets `spec.upgrade.timeout` (in place) or `spec.install.timeout` (reinstall): those win, so raise them. Choose one way in the rehearsal and keep to it:
 
    - **In place,** when the pre-flight shows the same selector, `serviceName` and `podManagementPolicy` as this chart renders, and no volume claims. Keep the release name and `<fullname>`, and point the HelmRelease at this chart, with:
 
