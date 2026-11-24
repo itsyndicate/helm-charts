@@ -398,16 +398,16 @@ Host of a URL or a bare hostname, without port. Call with the string; empty in, 
 {{- end }}
 
 {{/*
-NetworkPolicy egress rule for DNS, shared by both policies.
+NetworkPolicy egress rule for DNS, shared by both policies. No peers (networkPolicy.dnsTo: []) is any destination.
 */}}
 {{- define "keycloak.dnsEgress" -}}
-- to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-  ports:
+- ports:
     - port: 53
       protocol: UDP
     - port: 53
       protocol: TCP
+  {{- with .Values.networkPolicy.dnsTo }}
+  to:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

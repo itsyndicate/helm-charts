@@ -325,6 +325,7 @@
         "ingressFrom": { "$ref": "#/definitions/objectList" },
         "metricsFrom": { "$ref": "#/definitions/objectList" },
         "databaseTo": { "$ref": "#/definitions/objectList" },
+        "dnsTo": { "$ref": "#/definitions/objectList" },
         "extraIngress": { "$ref": "#/definitions/objectList" },
         "extraEgress": { "$ref": "#/definitions/objectList" }
       }

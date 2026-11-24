@@ -519,12 +519,10 @@ httpRoute:
             type: Exact
             value: /robots.txt
 
-# -- NetworkPolicy, default deny, of the Keycloak pods. Always allowed: DNS to kube-system, and all traffic between
-# this release's pods (clustering on 7800/57800, the hook and test pods). DNS egress is allowed to the `kube-system`
-# namespace only: NodeLocal DNSCache (169.254.20.10) or a DNS namespace other than kube-system needs an `extraEgress`
-# `ipBlock` / `namespaceSelector` rule. With `realmImport` or `tests` enabled a second policy `<fullname>-hooks`
-# gives those pods egress to DNS and to Keycloak only; `extraEgress` does not reach it (policies add up: bring your
-# own through `extraObjects`).
+# -- NetworkPolicy, default deny, of the Keycloak pods. Always allowed: DNS to `dnsTo`, and all traffic between
+# this release's pods (clustering on 7800/57800, the hook and test pods). With `realmImport` or `tests` enabled a
+# second policy `<fullname>-hooks` gives those pods egress to DNS (`dnsTo`) and to Keycloak only; `extraEgress` does
+# not reach it (policies add up: bring your own through `extraObjects`).
 # @section -- Networking
 networkPolicy:
   # -- Render the NetworkPolicies. They only act when the cluster's CNI enforces NetworkPolicy.
@@ -543,11 +541,20 @@ networkPolicy:
   # also set `database.port.value`.
   # @section -- Networking
   databaseTo: []
+  # -- Peers of the DNS egress rule (port 53) of both policies. The list replaces the default. A DNS cache on the
+  # host network (NodeLocal DNSCache) is usually not matched by a namespace selector: add an `ipBlock` of the
+  # nameserver address in the pods' `/etc/resolv.conf` (169.254.20.10/32 by default). `[]` allows port 53 to any
+  # destination.
+  # @section -- Networking
+  dnsTo:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
   # -- Extra ingress rules (NetworkPolicyIngressRule list)
   # @section -- Networking
   extraIngress: []
   # -- Extra egress rules (NetworkPolicyEgressRule list). Every outbound call of Keycloak needs one: identity
-  # brokering and social login (443), SMTP, LDAP, NodeLocal DNSCache.
+  # brokering and social login (443), SMTP, LDAP.
   # @section -- Networking
   extraEgress: []
 

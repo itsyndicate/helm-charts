@@ -334,7 +334,7 @@ proxy:
 
 ### NetworkPolicy
 
-`networkPolicy.enabled` renders a default-deny policy for the Keycloak pods. Always allowed: DNS to the `kube-system` namespace, and all traffic between the pods of the release. Everything else is yours to open:
+`networkPolicy.enabled` renders a default-deny policy for the Keycloak pods. Always allowed: DNS to `networkPolicy.dnsTo` (the `kube-system` namespace by default), and all traffic between the pods of the release. Everything else is yours to open:
 
 ```yaml
 networkPolicy:
@@ -345,16 +345,13 @@ networkPolicy:
   databaseTo:
     - ipBlock:
         cidr: 10.0.32.0/20 # database subnets
-  extraEgress:
-    # NodeLocal DNSCache
-    - to:
-        - ipBlock:
-            cidr: 169.254.20.10/32
-      ports:
-        - port: 53
-          protocol: UDP
-        - port: 53
-          protocol: TCP
+  # NodeLocal DNSCache. The list replaces the default, so kube-system is repeated.
+  dnsTo:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    - ipBlock:
+        cidr: 169.254.20.10/32
 ```
 
 | Value | Opens |
@@ -362,9 +359,10 @@ networkPolicy:
 | `ingressFrom` | The http(s) port, for the ingress controller or gateway pods, or the load balancer subnets |
 | `metricsFrom` | The management port, for whatever scrapes `/metrics` |
 | `databaseTo` | Egress on `database.port.value`, else the vendor's default port. The policy cannot read Secrets: when the port comes from a `secretKeyRef` or from `database.url`, also set `database.port.value` |
-| `extraIngress`, `extraEgress` | Anything else. Every outbound call needs an egress rule: identity brokering, SMTP, LDAP, a DNS service outside `kube-system` |
+| `dnsTo` | Port 53, for both policies. Default: the `kube-system` namespace. A DNS cache on the host network (NodeLocal DNSCache) is usually not matched by a namespace selector: add an `ipBlock` of the nameserver address in the pods' `/etc/resolv.conf`. A DNS service elsewhere: its namespace. `[]` opens port 53 to any destination |
+| `extraIngress`, `extraEgress` | Anything else. Every outbound call needs an egress rule: identity brokering, SMTP, LDAP |
 
-With `realmImport` or `tests` enabled, a second policy `<fullname>-hooks` gives those pods egress to DNS and to Keycloak only; `extraEgress` does not apply to it. A NetworkPolicy acts only when the cluster's CNI enforces it.
+With `realmImport` or `tests` enabled, a second policy `<fullname>-hooks` gives those pods egress to DNS (the same `dnsTo`) and to Keycloak only; `extraEgress` does not apply to it. A NetworkPolicy acts only when the cluster's CNI enforces it.
 
 ### external-dns
 
@@ -654,10 +652,11 @@ A shortcut also works at API level: point `realmImport.auth` at the id and Secre
 | ingress.host | string | `""` | Host. Rendered with tpl. Empty takes the host of `hostname.url`. |
 | ingress.paths | list | `[{"path":"/realms/","pathType":"Prefix"},{"path":"/resources/","pathType":"Prefix"},{"path":"/.well-known/","pathType":"Prefix"},{"path":"/robots.txt","pathType":"Exact"}]` | Paths to the http port, by default the ones Keycloak's reverse-proxy guide says to expose, plus `/robots.txt`. They assume `http.relativePath: /`: prefix them yourself otherwise. The admin console needs `/admin/`, left out: serve it through `ingress.admin`. `/realms/` still includes the master realm's login and token endpoints: to keep them off the public entry point list per-realm prefixes (`/realms/<realm>/`) instead, or deny `/realms/master/` with a per-path `backend`. `path: /` is for an internal-only entry point. An entry may set `backend` (an IngressBackend), rendered as is instead of the chart's Service, e.g. an ALB `use-annotation` fixed-response action that answers 403. |
 | ingress.tls | list | `[]` | TLS entries (`[{secretName, hosts}]`). Empty `hosts` take `host`, or are left out when there is no host. Leave empty when TLS ends at the load balancer. |
-| networkPolicy | object | `{"databaseTo":[],"enabled":false,"extraEgress":[],"extraIngress":[],"ingressFrom":[],"metricsFrom":[]}` | NetworkPolicy, default deny, of the Keycloak pods. Always allowed: DNS to kube-system, and all traffic between this release's pods (clustering on 7800/57800, the hook and test pods). DNS egress is allowed to the `kube-system` namespace only: NodeLocal DNSCache (169.254.20.10) or a DNS namespace other than kube-system needs an `extraEgress` `ipBlock` / `namespaceSelector` rule. With `realmImport` or `tests` enabled a second policy `<fullname>-hooks` gives those pods egress to DNS and to Keycloak only; `extraEgress` does not reach it (policies add up: bring your own through `extraObjects`). |
+| networkPolicy | object | `{"databaseTo":[],"dnsTo":[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"kube-system"}}}],"enabled":false,"extraEgress":[],"extraIngress":[],"ingressFrom":[],"metricsFrom":[]}` | NetworkPolicy, default deny, of the Keycloak pods. Always allowed: DNS to `dnsTo`, and all traffic between this release's pods (clustering on 7800/57800, the hook and test pods). With `realmImport` or `tests` enabled a second policy `<fullname>-hooks` gives those pods egress to DNS (`dnsTo`) and to Keycloak only; `extraEgress` does not reach it (policies add up: bring your own through `extraObjects`). |
 | networkPolicy.databaseTo | list | `[]` | Egress peers of the database (`ipBlock` of the RDS subnets), on `database.port.value`, else the vendor's default port. The policy cannot read Secrets: when the port comes from a `secretKeyRef` or from `database.url`, also set `database.port.value`. |
+| networkPolicy.dnsTo | list | `[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"kube-system"}}}]` | Peers of the DNS egress rule (port 53) of both policies. The list replaces the default. A DNS cache on the host network (NodeLocal DNSCache) is usually not matched by a namespace selector: add an `ipBlock` of the nameserver address in the pods' `/etc/resolv.conf` (169.254.20.10/32 by default). `[]` allows port 53 to any destination. |
 | networkPolicy.enabled | bool | `false` | Render the NetworkPolicies. They only act when the cluster's CNI enforces NetworkPolicy. |
-| networkPolicy.extraEgress | list | `[]` | Extra egress rules (NetworkPolicyEgressRule list). Every outbound call of Keycloak needs one: identity brokering and social login (443), SMTP, LDAP, NodeLocal DNSCache. |
+| networkPolicy.extraEgress | list | `[]` | Extra egress rules (NetworkPolicyEgressRule list). Every outbound call of Keycloak needs one: identity brokering and social login (443), SMTP, LDAP. |
 | networkPolicy.extraIngress | list | `[]` | Extra ingress rules (NetworkPolicyIngressRule list) |
 | networkPolicy.ingressFrom | list | `[]` | Peers allowed to the http(s) port: ingress controller or gateway pods, or the load balancer subnets (`ipBlock`) for ALB `target-type: ip`. Give the load balancer subnets of its own: an `ipBlock` that also holds pods or nodes opens the port to them. |
 | networkPolicy.metricsFrom | list | `[]` | Peers allowed to the management port, e.g. Prometheus |
