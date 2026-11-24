@@ -1,0 +1,107 @@
+# -- Number of replicas to spin up
+replicaCount: 1
+
+# -- Secrets used to store docker registry credentials
+imagePullSecrets: [ ]
+
+# -- Overrides release name
+nameOverride: ""
+
+# -- Overrides full release name
+fullnameOverride: ""
+
+# -- Service Account
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Automatically mount a ServiceAccount's API credentials
+  automount: true
+  # -- Annotations to add to the service account
+  annotations: { }
+  # -- The name of the service account to use
+  name: ""
+
+# -- Annotations to add to the pod
+podAnnotations: { }
+
+# -- Labels to add to the pod
+podLabels: { }
+
+# -- Security context for the pod
+podSecurityContext: { }
+# fsGroup: 2000
+
+# -- Node selector
+nodeSelector: { }
+
+# -- Affinity rules
+affinity: { }
+
+# -- Tolerations for the pod
+tolerations: [ ]
+
+# -- Pgsync Specific Configurations
+# @section -- Pgsync Settings
+# @default -- A complex object. Please check values below
+pgsync:
+  image:
+    # -- Pgsync image repository
+    # @section -- Pgsync Settings
+    repository: ghcr.io/your-org/pgsync
+    # -- image pull policy
+    # @section -- Pgsync Settings
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag whose default is the chart appVersion
+    tag: ""
+
+  # -- Pgsync container security context
+  # @section -- Pgsync Settings
+  securityContext: { }
+
+  # -- Pgsync container resources
+  # @section -- Pgsync Settings
+  resources: { }
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+  # -- Pgsync container additional volumes
+  # @section -- Pgsync Settings
+  volumes: [ ]
+  # - name: config
+  #   configMap:
+  #     name: pgsync-config
+
+  # -- Pgsync container additional volume mounts
+  # @section -- Pgsync Settings
+  volumeMounts: [ ]
+  # - name: config
+  #   mountPath: /etc/pgsync
+  #   readOnly: true
+
+  # -- Pgsync environment variables and secrets
+  # @section -- Pgsync Settings
+  # @default -- A complex object. Please check values below
+  env:
+    # -- Inline environment variables
+    # @section -- Pgsync Settings
+    variables: { }
+    #   PG_SYNC_DB_URL: "postgres://user:pass@host:5432/db"
+
+    envFromSecretsManager:
+      # -- Enable loading env vars from external secret store
+      # @section -- Pgsync Settings
+      enabled: false
+
+      # -- Secret path in the external secret store
+      # @section -- Pgsync Settings
+      secretPath: ""
+
+      # -- Optionally override secret store reference
+      # @section -- Pgsync Settings
+      secretStoreRef:
+        name: global-secret-store
+        kind: ClusterSecretStore
