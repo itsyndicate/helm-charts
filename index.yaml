@@ -424,6 +424,19 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/hermes-0.1.0/hermes-0.1.0.tgz
     version: 0.1.0
+  keycloak:
+  - apiVersion: v2
+    appVersion: 26.8.2
+    created: "2026-11-24T11:38:00.357565917Z"
+    description: Keycloak (Quarkus) on the official image as a StatefulSet with an
+      external database
+    digest: 760df160ee2a6688e63f9d544053b93b9f85d529cb1a665e4b65b89797cbaa3c
+    kubeVersion: '>=1.27.0-0'
+    name: keycloak
+    type: application
+    urls:
+    - https://github.com/itsyndicate/helm-charts/releases/download/keycloak-0.1.0/keycloak-0.1.0.tgz
+    version: 0.1.0
   nextjs:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -535,4 +548,4 @@ entries:
     urls:
     - https://github.com/itsyndicate/helm-charts/releases/download/nextjs-0.1.0/nextjs-0.1.0.tgz
     version: 0.1.0
-generated: "2026-11-20T11:19:04.553697398Z"
+generated: "2026-11-24T11:38:00.35793737Z"
