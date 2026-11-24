@@ -1,0 +1,72 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "keycloak.childName" (dict "ctx" . "suffix" "test") }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "keycloak.childName" (dict "ctx" . "suffix" "hooks") | quote }}
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.priorityClassName }}
+  priorityClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: health
+      image: {{ include "keycloak.imageRef" .Values.tests.image | quote }}
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      {{- /* 12 attempts, 5 s apart: the headless Service publishes not-ready pods, so one shot fails during a rollout */}}
+      command:
+        - sh
+        - -c
+        - |
+          check() {
+            n=1
+            until wget -q -T 5 --no-check-certificate -O - "$1" | grep -q "$2"; do
+              if [ "$n" -ge 12 ]; then
+                echo "FAIL: no $2 from $1 after $n attempts" >&2
+                exit 1
+              fi
+              n=$((n + 1))
+              sleep 5
+            done
+          }
+          check "$0" '"UP"'
+          check "$1" '"issuer"'
+        - {{ printf "%s://%s:%v%s/health/ready" (include "keycloak.managementScheme" . | lower) (include "keycloak.headlessName" .) .Values.http.managementPort (include "keycloak.managementPath" .) | quote }}
+        - {{ printf "%s/realms/master/.well-known/openid-configuration" (include "keycloak.serviceUrl" .) | quote }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tests.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with pick (.Values.affinity | default dict) "nodeAffinity" }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

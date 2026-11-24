@@ -1,0 +1,10 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak (Quarkus) on the official image as a StatefulSet with an external database
+type: application
+# podDisruptionBudget.unhealthyPodEvictionPolicy, on by default, needs Kubernetes 1.27
+kubeVersion: ">=1.27.0-0"
+# Chart version, Semantic Versioning. Increment it on every change to the chart.
+version: 0.1.0
+# Keycloak release the chart is tested with. Not a default: image.tag is required.
+appVersion: "26.8.2"

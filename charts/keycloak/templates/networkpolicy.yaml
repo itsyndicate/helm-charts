@@ -1,0 +1,109 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "keycloak.fullname" . }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "keycloak.podSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Pods of this release: the other Keycloak nodes (JGroups 7800/57800), the realm-import hook, the test pod.
+    # This policy does not select the hook and test pods: their egress is the -hooks policy.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "keycloak.selectorLabels" . | nindent 14 }}
+    {{- with $np.ingressFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        {{- if $.Values.http.enabled }}
+        - port: http
+          protocol: TCP
+        {{- end }}
+        {{- if $.Values.https.enabled }}
+        - port: https
+          protocol: TCP
+        {{- end }}
+    {{- end }}
+    {{- with $np.metricsFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - port: management
+          protocol: TCP
+    {{- end }}
+    {{- with $np.extraIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    {{- include "keycloak.dnsEgress" . | nindent 4 }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "keycloak.selectorLabels" . | nindent 14 }}
+    {{- with $np.databaseTo }}
+    {{- $defaults := dict "postgres" 5432 "mysql" 3306 "mariadb" 3306 "mssql" 1433 "oracle" 1521 }}
+    {{- $port := $.Values.database.port.value | default (get $defaults $.Values.database.vendor) | toString }}
+    {{- if not (regexMatch "^[0-9]+$" $port) }}
+    {{- fail (printf "database.port.value %q is not a number: networkPolicy.databaseTo needs the port" $port) }}
+    {{- end }}
+    - to:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - port: {{ atoi $port }}
+          protocol: TCP
+    {{- end }}
+    {{- with $np.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- if or .Values.realmImport.enabled .Values.tests.enabled }}
+---
+{{- /* The hook and test pods are not Keycloak pods, so the policy above does not select them. A regular resource,
+not a hook: it must exist before they start. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "keycloak.childName" (dict "ctx" . "suffix" "hooks") }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "keycloak.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - realm-import
+          - test
+  policyTypes:
+    - Egress
+  egress:
+    {{- include "keycloak.dnsEgress" . | nindent 4 }}
+    # Container ports as numbers: a policy sees the pod port, not service.port, and named egress ports are not
+    # portable across CNIs
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "keycloak.podSelectorLabels" . | nindent 14 }}
+      ports:
+        {{- if .Values.http.enabled }}
+        - port: {{ .Values.http.port }}
+          protocol: TCP
+        {{- end }}
+        {{- if .Values.https.enabled }}
+        - port: {{ .Values.https.port }}
+          protocol: TCP
+        {{- end }}
+        - port: {{ .Values.http.managementPort }}
+          protocol: TCP
+{{- end }}
+{{- end }}

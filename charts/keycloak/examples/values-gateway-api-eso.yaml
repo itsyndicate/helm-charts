@@ -1,0 +1,85 @@
+# Gateway API + chart-managed ExternalSecret: an HTTPRoute with per-realm prefixes, and credentials from an
+# ExternalSecret the chart renders. Every secretKeyRef without a name points to the Secret of that ExternalSecret,
+# which extracts one AWS Secrets Manager secret (a flat JSON object). Names, hosts and CIDRs are placeholders.
+#   helm template keycloak charts/keycloak -f charts/keycloak/examples/values-gateway-api-eso.yaml
+
+replicaCount: 2
+
+image:
+  tag: "26.8.2"
+  digest: sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+
+hostname:
+  url: https://sso.example.com/
+proxy:
+  headers: xforwarded
+  # The addresses the gateway connects from, and nothing wider (placeholder)
+  trustedAddresses: 10.0.8.0/24
+
+# Renders ExternalSecret and Secret `<fullname>-secrets`. That name must be free in the namespace: set
+# externalSecret.name when a Secret or ExternalSecret of that name already exists.
+externalSecret:
+  enabled: true
+  dataFrom:
+    - extract:
+        key: myapp/prod/keycloak
+
+database:
+  host:
+    secretKeyRef: {key: DB_HOST}
+  database:
+    secretKeyRef: {key: DB_NAME}
+  username:
+    secretKeyRef: {key: DB_USER}
+  password:
+    secretKeyRef: {key: DB_PASSWORD}
+
+# Acts only on a new, empty database. Remove it once a permanent admin of the master realm exists.
+bootstrapAdmin:
+  password:
+    secretKeyRef: {key: ADMIN_PASSWORD}
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: public
+      namespace: gateway
+      sectionName: https
+  # hostnames default to the host of hostname.url
+  rules:
+    # Per-realm prefixes: the master realm and the admin console are not routed at all.
+    # No backendRefs key, so the rule goes to the chart's Service.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /realms/example/
+        - path:
+            type: PathPrefix
+            value: /resources/
+        - path:
+            type: PathPrefix
+            value: /.well-known/
+      timeouts:
+        request: 30s
+    # The bare host redirects to the account console
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /realms/example/account/
+            statusCode: 302
+
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: gateway
+  databaseTo:
+    - ipBlock:
+        cidr: 10.0.32.0/20

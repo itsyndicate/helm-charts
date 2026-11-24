@@ -1,0 +1,25 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- $pdb := .Values.podDisruptionBudget }}
+{{- $hasMin := not (kindIs "invalid" $pdb.minAvailable) }}
+{{- if eq $hasMin (not (kindIs "invalid" $pdb.maxUnavailable)) }}
+{{- fail "podDisruptionBudget: set exactly one of maxUnavailable and minAvailable, the other to null" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "keycloak.fullname" . }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+spec:
+  {{- if $hasMin }}
+  minAvailable: {{ $pdb.minAvailable | toJson }}
+  {{- else }}
+  maxUnavailable: {{ $pdb.maxUnavailable | toJson }}
+  {{- end }}
+  {{- with $pdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "keycloak.podSelectorLabels" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,39 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{- $sm := .Values.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "keycloak.fullname" . }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    {{- with $sm.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- /* Matches both Services; only the headless one has the management port, so only it is scraped */}}
+  selector:
+    matchLabels:
+      {{- include "keycloak.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: management
+      path: {{ printf "%s/metrics" (include "keycloak.managementPath" .) | quote }}
+      scheme: {{ include "keycloak.managementScheme" . | lower }}
+      {{- if .Values.https.enabled }}
+      tlsConfig:
+        insecureSkipVerify: true
+      {{- end }}
+      {{- with $sm.interval }}
+      interval: {{ . | quote }}
+      {{- end }}
+      {{- with $sm.scrapeTimeout }}
+      scrapeTimeout: {{ . | quote }}
+      {{- end }}
+      {{- with $sm.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,37 @@
+Keycloak {{ .Values.image.tag }} runs as StatefulSet {{ include "keycloak.fullname" . }} in namespace {{ .Release.Namespace }}.
+{{- with .Values.hostname.url }}
+
+Public URL: {{ tpl . $ }}
+{{- end }}
+
+Health and logs:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=keycloak
+  kubectl -n {{ .Release.Namespace }} logs {{ include "keycloak.fullname" . }}-0 -c keycloak
+{{- if .Values.tests.enabled }}
+  helm -n {{ .Release.Namespace }} test {{ .Release.Name }}
+{{- end }}
+{{- if not (dig "secretKeyRef" "key" "" .Values.database.password) }}
+
+NOTE: database.password.secretKeyRef is not set. Fine when Keycloak reads the password from a mounted file;
+otherwise it cannot log in to the database.
+{{- end }}
+{{- $admin := .Values.bootstrapAdmin }}
+{{- if or (dig "password" "secretKeyRef" "key" "" $admin) (dig "client" "secret" "secretKeyRef" "key" "" $admin) }}
+
+NOTE: bootstrapAdmin (a temporary admin user, a temporary admin service account, or both) only acts on a new
+database, when Keycloak creates the master realm. Changing its Secret later changes nothing. Create a permanent
+admin of the master realm first and check that it works, then delete the temporary one: without any master admin
+nobody can administer Keycloak.
+{{- else }}
+
+NOTE: neither bootstrapAdmin.password (user) nor bootstrapAdmin.client.secret (service account) is set, so no
+temporary admin is created. It only acts on a new database anyway: fine for an existing one, but a new one has
+no admin.
+{{- end }}
+{{- if and .Values.realmImport.enabled (not .Values.autoscaling.enabled) (eq (int .Values.replicaCount) 0) }}
+
+NOTE: replicaCount is 0, so the realm import was skipped: the hook needs a running Keycloak.
+{{- end }}
+
+A Keycloak minor or major version change must not roll next to the old version: see "Upgrading Keycloak" in the
+chart README.

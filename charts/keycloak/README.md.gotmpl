@@ -1,0 +1,503 @@
+{{ template "chart.header" . }}
+{{ template "chart.description" . }}
+
+{{ template "chart.badgesSection" . }}
+
+Keycloak on the official `quay.io/keycloak/keycloak` image, run with `kc.sh start` as a StatefulSet against an external database. The pods cluster through the database (`jdbc-ping`) and need no Kubernetes API access. The chart is tested with Keycloak 26.8.2 and needs Kubernetes 1.27 or newer.
+
+Ready-made values are in [`examples/`](examples). Their Keycloak settings were booted on the real 26.8.2 image in a lab; the load balancer and Gateway parts were only rendered.
+
+| File | Shows |
+|---|---|
+| `values-aws-alb.yaml` | AWS, dev/staging-sized: two pods, a public ALB that denies the master realm, the admin console on an internal ALB, an existing Secret, a theme from an image, NetworkPolicy |
+| `values-production-ha.yaml` | AWS, production, HA: 3 to 6 pods with an HPA, on-demand nodes, a fixed database pool, metrics options, NetworkPolicy with internet-only egress, realm import |
+| `values-gateway-api-eso.yaml` | Gateway API + chart-managed ExternalSecret: an HTTPRoute with per-realm prefixes |
+
+Two runbooks are in [`docs/`](docs): [upgrading.md](docs/upgrading.md) and [migrating-from-bitnami.md](docs/migrating-from-bitnami.md). Facts on this page were measured in a lab, partly under emulation ([lab-measurements.md](docs/lab-measurements.md)). Where something was not tested it says **verify on dev**.
+
+## Before you install
+
+Three values have no default, and the chart refuses to render without them:
+
+| Value | Why | Message |
+|---|---|---|
+| `image.tag` | A chart upgrade alone must never change the Keycloak version | `image.tag is required: pin the Keycloak version (e.g. "26.8.2"). ...` |
+| `hostname.url` | Keycloak refuses to start without it while `hostname.strict` is true | `hostname.url is required while hostname.strict is true: ...` |
+| `database.host` or `database.url` | The database is external; none is bundled | `database.host or database.url is required (value or secretKeyRef)` |
+
+Helm prints each as `Error: execution error at (keycloak/templates/statefulset.yaml:<line>): <message>`. `helm lint` without values still passes: it lists them as `[INFO] Missing required value`.
+
+The smallest values that render:
+
+```yaml
+image:
+  tag: "26.8.2"
+  digest: sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+hostname:
+  url: https://id.example.com/
+database:
+  host:
+    value: keycloak.cluster-abc.eu-west-1.rds.amazonaws.com
+  database:
+    value: keycloak
+  username:
+    secretKeyRef: {name: keycloak-credentials, key: db_username}
+  password:
+    secretKeyRef: {name: keycloak-credentials, key: db_password}
+```
+
+- Give `hostname.url` as a full `https://` URL, not a bare host name. With it, plain-HTTP calls inside the cluster (the realm-import hook, `helm test`) also work from pod IPs outside RFC 1918, such as EKS pods in 100.64.0.0/10. Without it they got a 403.
+- The schema is strict: an unknown key or a wrong type fails the render.
+- Reloader annotations are on by default and do nothing without Reloader. The ExternalSecret, ServiceMonitor and HTTPRoute are off by default; their CRDs must exist when you turn them on.
+
+## Image, read-only root filesystem and boot
+
+Pin the tag and the digest. `image.digest` renders as `repository:tag@digest`, so the digest is what runs and the tag stays readable. The tag must start with the Keycloak version (`26.8.2`, `26.8.2-custom`): the [upgrade guard](#upgrading-keycloak) reads the version from it.
+
+The containers run with `readOnlyRootFilesystem: true` under the restricted Pod Security Standard (uid 1000, no capabilities, `RuntimeDefault` seccomp). Keycloak writes to three emptyDirs: `/tmp`, `/opt/keycloak/data` (transaction logs) and `/opt/keycloak/lib/quarkus`.
+
+The stock image is not pre-built. A non-optimized `start` first re-augments into `lib/quarkus`, in a JVM of its own. An empty directory there fails, and a start killed in that window leaves it half-written. So the init container `seed-quarkus` copies the image's `lib/quarkus` into a second emptyDir, and the Keycloak container copies it from there on every start before it runs `kc.sh`. `java` still ends up as PID 1.
+
+A container killed in the middle of the build recovers on its next start. The price: **every container restart re-augments.** Under emulation a start took 38 s to Ready with the build and 12-14 s without it. A crash loop, for example Keycloak exiting because the database is unreachable, runs the full build on every retry.
+
+**`optimized: true`** is for an image you built with `kc.sh build`: no build JVM at boot, no wrapper command, `lib/quarkus` read-only. Such an image booted in about 10 s under emulation; less memory at boot is expected, not measured. Every build-time option must be the same in the build and at start, or 26.8.2 refuses to start (exit code 2): `db`, `features`, `http-relative-path`, `http-management-relative-path`, `health-enabled=true`, `metrics-enabled=true`, and every build-time option you set through `config` (in the production example `features` and `event-metrics-user-enabled`). Provider JARs must be in that image: `providers` entries of `target: providers` fail the render together with `optimized`; `target: themes` works.
+
+**Providers and themes from an image.** Each `providers` entry becomes an init container `provider-<name>` that copies `<source>/.` into an emptyDir mounted read-only at `/opt/keycloak/providers` (or `/opt/keycloak/themes` with `target: themes`). The files must be readable by uid 1000, and the image needs `sh` and `cp`. Tested with a theme JAR and a theme folder.
+
+**JVM flags** go in `jvm.jdkJavaOptions` (`JDK_JAVA_OPTIONS`) or `jvm.javaOptsAppend` (`JAVA_OPTS_APPEND`). Never set `JAVA_OPTS`: it replaces the kc.sh defaults, including the heap `-XX:MaxRAMPercentage=70`.
+
+## Sizing
+
+| | Chart default | Rule |
+|---|---|---|
+| Memory | request = limit = `1536Mi` | Heap is 70% of the limit; the other 30% must hold the non-heap memory. `1280Mi` is the minimum, `2Gi` a production start |
+| CPU | request `500m`, no limit | Take the request from measured load; a limit only throttles the boot |
+| Database connections | Keycloak's own default: up to 100 per pod | `maxReplicas` x `db-pool-max-size` <= about 80% of the database's `max_connections` |
+| Replicas | `1` | Two or more: one replica means downtime on every restart |
+
+**Memory.** `kc.sh` sets the maximum heap to 70% of the memory limit. Measured on an idle 26.8.2 pod: 303-327 MiB of non-heap memory. At `1536Mi` the worst case is 1076 MiB of heap plus the non-heap memory, about 1379-1421 MiB: it fits. At `1280Mi` only 40-80 MiB are left once the heap is full: enough for a small dev pod, not for load, and the minimum with kc.sh's default heap percentages. At `1Gi` there is no margin, and a `768Mi` limit was OOM-killed at boot. Below `1280Mi`, lower the heap share with `JAVA_OPTS_KC_HEAP` through `extraEnv`; it replaces all three default flags, so set all of them, for example `-XX:MaxRAMPercentage=60 -XX:MinRAMPercentage=60 -XX:InitialRAMPercentage=40`. Memory under load was not measured: verify on dev.
+
+**CPU.** The re-augmentation at boot and the JIT warm-up are CPU-heavy, and a limit only throttles them. The HPA scales on CPU relative to the request (`targetCPUUtilizationPercentage`) or on an absolute value (`targetCPUAverageValue`).
+
+**Database connections.** Each pod opens up to `db-pool-max-size` connections. Upstream recommends one fixed size: initial = min = max. With `autoscaling.maxReplicas: 6` this is 180 connections, and each pod held its 30 right after boot:
+
+```yaml
+config:
+  db-pool-initial-size: 30
+  db-pool-min-size: 30
+  db-pool-max-size: 30
+```
+
+**Replicas.** A StatefulSet replaces pods one at a time and never adds a surge pod. With one replica, every config change, Secret rotation and node drain is one boot of downtime (the PodDisruptionBudget's `maxUnavailable: 1` allows the eviction).
+
+## Database and secrets
+
+Each database field takes a plain `value` or a `secretKeyRef: {name, key}`; the Secret reference wins when both are set. `database.password` accepts only a Secret reference. When the chart takes over an existing database, set `database.schema` to the schema in use: with another one Keycloak initialises a new, empty schema.
+
+### Secrets as environment variables (the default)
+
+```yaml
+database:
+  host:
+    secretKeyRef: {name: keycloak-credentials, key: db_host}
+  database:
+    value: keycloak
+  username:
+    secretKeyRef: {name: keycloak-credentials, key: db_username}
+  password:
+    secretKeyRef: {name: keycloak-credentials, key: db_password}
+```
+
+Name an existing Secret, as above, when something outside the chart already syncs it. A `secretKeyRef` without `name` points to the Secret of the chart's own ExternalSecret (`externalSecret.enabled`), called `<fullname>-secrets` unless `externalSecret.name` is set. That name must be free in the namespace: Helm does not adopt an ExternalSecret or Secret that already exists.
+
+**`$` in a value.** Keycloak expands expressions in what it reads from the environment: `a$$b` arrives as `a$b`, and a value with a `${...}` it cannot resolve is dropped silently, as if no password was given. Backslashes are fine. So double every `$`, or use passwords without `$`. Upstream offers a `KCRAW_` prefix for raw values (verify on dev).
+
+### Secrets from a file
+
+If your policy forbids Secret data in environment variables, let Keycloak read it from a config file: mount a Secret that holds a `keycloak.conf` and point `KC_CONFIG_FILE` at it. Tested on 26.8.2: the file is readable with mode 0440 through `fsGroup`; the password appears in no log, environment or command line; an environment variable still wins over the file; the file replaces the image's default `conf/keycloak.conf` and is read only at start.
+
+```yaml
+database:
+  host:
+    value: keycloak.cluster-abc.eu-west-1.rds.amazonaws.com
+  database:
+    value: keycloak
+  # no username and no password: both come from the file
+
+externalSecret:
+  enabled: true
+  name: keycloak-conf
+  dataFrom:
+    - extract:
+        key: myapp/dev/keycloak
+  template:
+    engineVersion: v2
+    data:
+      keycloak.conf: |
+        db-username={{ "{{" }} .db_username | replace "\\" "\\\\" | replace "$" "$$" {{ "}}" }}
+        db-password={{ "{{" }} .db_password | replace "\\" "\\\\" | replace "$" "$$" {{ "}}" }}
+
+extraEnv:
+  - name: KC_CONFIG_FILE
+    value: /etc/keycloak/keycloak.conf
+extraVolumes:
+  - name: keycloak-conf
+    secret:
+      secretName: keycloak-conf
+      defaultMode: 288 # 0440: readable by the keycloak user through fsGroup
+extraVolumeMounts:
+  - name: keycloak-conf
+    mountPath: /etc/keycloak
+    readOnly: true
+```
+
+- **Escaping in `keycloak.conf`** (tested): write every `\` as `\\` and every `$` as `$$`. Nothing else needs escaping: `#`, `=`, `:`, `!`, quotes and inner spaces are fine. An unescaped `\` is eaten (`a\b` becomes `ab`), a value with `${...}` makes Keycloak drop the option silently, and a password that starts or ends with whitespace cannot be used. The two `replace` calls above do the escaping in External Secrets Operator; that part was not run: verify on dev.
+- `externalSecret.template` is passed to `spec.target.template` as it is. A Secret from elsewhere works the same way: leave `externalSecret` off and mount it.
+- `--config-file` cannot go through `extraArgs` (a global option, it must come before `start`). The install notes say that `database.password` is not set; that is expected.
+- `bootstrapAdmin` and `realmImport.auth` have no file mode: they stay `secretKeyRef` environment variables.
+
+### Reloader
+
+Environment variables and the config file are read at start, so a rotated Secret reaches Keycloak at the next restart. `reloader.enabled` (default `true`) annotates the StatefulSet for [Stakater Reloader](https://github.com/stakater/Reloader).
+
+| `reloader.mode` | Restarts the pods when |
+|---|---|
+| `targeted` (default) | A Secret or ConfigMap of the `database` references, of `extraEnv`, `extraEnvFrom` or `extraVolumes` changes. Not the `bootstrapAdmin` Secrets (a restart does not re-apply them) and not the TLS Secret (Keycloak reloads certificate files itself) |
+| `auto` | Anything Reloader finds referenced by the pod changes (`reloader.stakater.com/auto: "true"`) |
+
+A rotation restarts the pods one at a time. Changes made through the chart need no Reloader: the pods carry `checksum/config` and, with the chart's ExternalSecret, `checksum/secret`. Neither these nor the pod labels depend on the chart version: a chart-only upgrade does not restart the pods.
+
+### Bootstrap admin
+
+`bootstrapAdmin` (`KC_BOOTSTRAP_ADMIN_*`) creates a temporary admin user, a temporary admin service account, or both. Keycloak applies it only when it creates the master realm, on the first start against an empty database. On an existing database it does nothing, and changing the Secret later changes nothing.
+
+**Do not delete the temporary admin before a permanent admin of the master realm exists and works.** Tested: after the bootstrap account was deleted, nobody could administer the master realm any more (403). The chart has no way back: the container always runs `start`, and `kc.sh bootstrap-admin` needs every node stopped. Once the permanent admin works, also remove `bootstrapAdmin` from your values, or the credential stays in the pod's environment. The tested order is in [The first run on a new database](#the-first-run-on-a-new-database).
+
+### Options: `config` and `extraEnv`
+
+Plain Keycloak options go in `config` as `option-name: value`. They render as `KC_OPTION_NAME` into the ConfigMap `<fullname>-env`. `config` has two defaults, `shutdown-delay: 15s` and `log-console-output: json`; set a key to `null` to drop one. With `json` the runtime records are JSON, but about ten lines per start stay plain text (kc.sh and the build JVM): a log pipeline must accept both.
+
+The chart refuses options that have a dedicated value, and everything that looks like a secret. The error names the option: `Error: execution error at (keycloak/templates/statefulset.yaml:57:28): config.<name> is not allowed: ...`
+
+| Refused in `config` | Set it through |
+|---|---|
+| `db`, `db-url`, `db-url-host`, `db-url-port`, `db-url-database`, `db-url-properties`, `db-schema`, `db-username` | `database.*` |
+| `hostname`, `hostname-admin`, `hostname-strict` | `hostname.*` |
+| `proxy-headers`, `proxy-trusted-addresses` | `proxy.*` |
+| `http-enabled`, `http-port`, `https-port`, `http-relative-path`, `http-management-*`, `https-certificate-file`, `https-certificate-key-file` | `http.*`, `https.*` |
+| `cache`, `cache-stack`, `cache-embedded-node-name` | `cache.*` |
+| `health-enabled`, `metrics-enabled`, `legacy-observability-interface` | Not configurable: health and metrics are always on, on the management port |
+| `bootstrap-admin-*` | `bootstrapAdmin.*` |
+| Any name ending in `password`, `secret` or `-pass` | `extraEnv` with a `secretKeyRef`, or the config file |
+
+`extraEnv` wins over everything the chart sets: an entry replaces the chart's own entry of the same name, and a container variable beats the same variable from the ConfigMap.
+
+## Values layering
+
+Flux `valuesFrom` layers and several `-f` files merge maps key by key and replace lists whole. Everything an environment overlay usually changes is a map or a scalar. A base layer and an overlay:
+
+```yaml
+providers:
+  example-theme:
+    source: /theme
+config:
+  log-level: INFO
+```
+
+```yaml
+providers:
+  example-theme:
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-theme:1.0.0 # {"$imagepolicy": "flux-system:my-theme"}
+config:
+  shutdown-delay: 30s
+  log-console-output: null
+```
+
+The result has one provider with `image` and `source`, `KC_LOG_LEVEL=INFO`, `KC_SHUTDOWN_DELAY=30s` and no `KC_LOG_CONSOLE_OUTPUT`. A Flux `$imagepolicy` marker works on the plain `image:` line.
+
+- **Lists are replaced whole:** `ingress.paths`, `ingress.admin.paths`, `httpRoute.rules`, `topologySpreadConstraints`, `extraEnv`, the `networkPolicy` lists. An overlay that adds one entry must repeat the others, the chart defaults included.
+- **Rendered with `tpl`:** `hostname.url`, `hostname.adminUrl` (twice, so `adminUrl: "{{ "{{" }} .Values.hostname.url {{ "}}" }}"` works even when `hostname.url` is a template), `ingress.host`, `ingress.admin.host`, `httpRoute.hostnames` and `extraObjects`.
+- **Labels:** `commonLabels` and `podLabels` are merged on the pods, and `podLabels` win. The keys the chart sets itself are refused.
+- **Flux:** a `valuesFrom` ConfigMap built by a kustomize `configMapGenerator` needs `disableNameSuffixHash: true`, because the HelmRelease refers to it by its plain name.
+- **Types:** annotation and label maps take strings only, and `--set` turns `true` and numbers into other types (`podAnnotations.<key>: Invalid type. Expected: string, given: boolean`). Use `--set-string`; in Terraform's `helm_release` give the `set` block `type = "string"`, or put such values into a values file.
+
+## Clustering
+
+| Value | Default | Notes |
+|---|---|---|
+| `cache.type` | `ispn` | `local` is for a single pod only |
+| `cache.stack` | `jdbc-ping` | Keycloak's default since 26.1: the pods find each other through the database. `kubernetes` (DNS_PING on the headless Service, deprecated since 26.3) also works. A custom stack goes through `extraEnv` (`KC_CACHE_STACK`) |
+| `cache.nodeNameFromPod` | `true` | Sets `KC_CACHE_EMBEDDED_NODE_NAME` from the pod name. The option exists since 26.8.0: set `false` for older images |
+
+- **Changing `cache.stack` needs every pod stopped first.** Treat it like a minor upgrade.
+- With `kubernetes` the chart adds `-Djgroups.dns.query=<fullname>-headless.<namespace>.svc.cluster.local` to `JAVA_OPTS_APPEND`. `cluster.local` is fixed: a cluster with another domain needs its own `-Djgroups.dns.query=...` in `jvm.javaOptsAppend`.
+- The pods talk to each other on 7800 and 57800. The chart's NetworkPolicy allows all traffic between the pods of the release.
+- User sessions are in the database, and so are login failures since 26.8.0. The `authenticationSessions` and `actionTokens` caches live in memory with two owners: when several members leave at once, logins in progress can be lost. This is why the HPA removes one pod per two minutes and the PodDisruptionBudget allows one disruption at a time.
+
+## Networking and exposure
+
+The Service `<fullname>` carries http (and https). Its port is the container port (8080) unless `service.port` is set; the HTTPRoute, the realm-import hook and the test follow it. The headless Service `<fullname>-headless` governs the StatefulSet and adds the management port 9000 with `/health/*` and `/metrics`, which is never on the Ingress or HTTPRoute.
+
+### What is public by default
+
+`ingress.paths` and `httpRoute.rules` default to the paths Keycloak's reverse-proxy guide says to expose, plus `/robots.txt`. They assume `http.relativePath: /`.
+
+| Path | In the defaults | Notes |
+|---|---|---|
+| `/realms/` | yes | Login pages and the OIDC and SAML endpoints of every realm, **the master realm included** |
+| `/resources/`, `/.well-known/`, `/robots.txt` | yes | Static files of the login pages; metadata |
+| `/admin/` | no | Admin console and Admin REST API. The guide says not to expose it: use `ingress.admin` |
+| `/` | no | The guide says not to expose it. Use `path: /` only on an internal-only entry point |
+| `/health/*`, `/metrics` | no | Management port only |
+
+Brute-force detection is off by default in Keycloak: enable it in every realm (`bruteForceProtected: true` in a realm file).
+
+### Admin console
+
+`ingress.admin` renders a second Ingress `<fullname>-admin` with its own class, annotations and host, independent of `ingress.enabled`. For a separate internal admin host, set `hostname.adminUrl` to it and add `/realms/master/` and `/resources/` to its paths:
+
+```yaml
+hostname:
+  url: https://id.example.com/
+  adminUrl: https://id-admin.internal.example.com/
+ingress:
+  admin:
+    enabled: true
+    className: alb-internal
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+    paths:
+      - path: /admin/
+        pathType: Prefix
+      - path: /realms/master/
+        pathType: Prefix
+      - path: /resources/
+        pathType: Prefix
+```
+
+The host comes from `ingress.admin.host`, else from `hostname.adminUrl`, else from the main Ingress. Without `paths` it serves `/admin/` only. With Gateway API, add a second HTTPRoute on an internal Gateway through `extraObjects`.
+
+### The master realm on a public load balancer
+
+Keycloak's reverse-proxy guide says to keep `/realms/master/` off the public internet. The default `/realms/` prefix includes it. Two ways to close it:
+
+**List per-realm prefixes** (`/realms/<realm>/` instead of `/realms/`). Then nothing of the master realm is routed at all; every new realm needs a new path. `examples/values-gateway-api-eso.yaml` does this.
+
+**Or deny it.** A path entry may carry its own `backend` (an IngressBackend), rendered as it is instead of the chart's Service. With the AWS Load Balancer Controller that is a fixed-response action: the action name in the annotation is the backend's Service name, and the port name is `use-annotation`.
+
+```yaml
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/actions.deny-master: >-
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden"}}
+  paths:
+    - path: /realms/master/
+      pathType: Prefix
+      backend:
+        service:
+          name: deny-master
+          port:
+            name: use-annotation
+    - path: /realms/
+      pathType: Prefix
+    - path: /resources/
+      pathType: Prefix
+    - path: /.well-known/
+      pathType: Prefix
+    - path: /robots.txt
+      pathType: Exact
+```
+
+By its documentation the controller orders the listener rules Exact first, then Prefix with the longest path first, so `/realms/master/` wins over `/realms/`. Neither the fixed response nor the rule order was tested on an ALB: verify on dev, with the path matrix in the [rehearsal checklist](docs/migrating-from-bitnami.md#rehearsal-checklist). The realm-import hook and `helm test` use the Service inside the cluster and keep working; other automation against the Admin API must go through the internal admin host.
+
+### Gateway API
+
+`httpRoute.rules` are Gateway API `HTTPRouteRule`s, and `httpRoute.parentRefs` is required. The chart only fills in the backend: a rule **without the `backendRefs` key** goes to the chart's Service on its http port; a rule with the key, even `backendRefs: []`, and a `RequestRedirect` rule are left as they are. See `examples/values-gateway-api-eso.yaml`.
+
+### Proxy headers
+
+```yaml
+proxy:
+  headers: xforwarded
+  trustedAddresses: 10.0.0.0/24,10.0.1.0/24
+```
+
+- Set `proxy.headers` only when every request comes through the proxy. Without it, and with an https `hostname.url`, kc.sh prints "Likely misconfiguration detected. When using an edge proxy, you must use `proxy-headers`" and Keycloak records the load balancer's address as the client.
+- `proxy.trustedAddresses` decides **whose** headers Keycloak honours; empty means any peer. List the load balancer's own subnets, not the whole VPC CIDR: any peer in a trusted range that can reach port 8080 can send forged `X-Forwarded-*` headers. With the AWS VPC CNI, pod IPs come from the node subnets, so give the ALBs subnets of their own, without nodes or pods (`alb.ingress.kubernetes.io/subnets`), and use the same CIDRs in `networkPolicy.ingressFrom` (CNI-specific: verify on dev).
+- **Behind an AWS ALB the client address stays client-controlled.** Keycloak takes the leftmost `X-Forwarded-For` element, and an ALB appends to the header instead of overwriting it. Take the real address from the ALB access logs or the WAF.
+
+### NetworkPolicy
+
+`networkPolicy.enabled` renders a default-deny policy for the Keycloak pods. Always allowed: DNS to `networkPolicy.dnsTo` (the `kube-system` namespace by default), and all traffic between the pods of the release. Everything else is yours to open:
+
+```yaml
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - ipBlock:
+        cidr: 10.0.0.0/24 # the load balancer's own subnets (ALB target-type: ip)
+  databaseTo:
+    - ipBlock:
+        cidr: 10.0.32.0/20 # database subnets
+  # NodeLocal DNSCache. The list replaces the default, so kube-system is repeated.
+  dnsTo:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    - ipBlock:
+        cidr: 169.254.20.10/32
+```
+
+| Value | Opens |
+|---|---|
+| `ingressFrom` | The http(s) port, for the ingress controller or gateway pods, or the load balancer subnets |
+| `metricsFrom` | The management port, for whatever scrapes `/metrics` |
+| `databaseTo` | Egress on `database.port.value`, else the vendor's default port. The policy cannot read Secrets: when the port comes from a `secretKeyRef` or from `database.url`, also set `database.port.value` |
+| `dnsTo` | Port 53, for both policies. Default: the `kube-system` namespace. A DNS cache on the host network (NodeLocal DNSCache) is usually not matched by a namespace selector: add an `ipBlock` of the nameserver address in the pods' `/etc/resolv.conf`. A DNS service elsewhere: its namespace. `[]` opens port 53 to any destination |
+| `extraIngress`, `extraEgress` | Anything else. Every outbound call needs an egress rule: identity brokering, SMTP, LDAP |
+
+With `realmImport` or `tests` enabled, a second policy `<fullname>-hooks` gives those pods egress to DNS (the same `dnsTo`) and to Keycloak only; `extraEgress` does not apply to it. A NetworkPolicy acts only when the cluster's CNI enforces it.
+
+### external-dns
+
+external-dns publishes the Ingress rule host in addition to the `external-dns.alpha.kubernetes.io/hostname` annotation, and the chart always renders a rule host. Where the public name is an alias managed elsewhere (a CDN in front of the load balancer), run external-dns with `--ignore-ingress-rules-spec` and put the name it should publish into `ingress.annotations`.
+
+## Graceful shutdown and rollouts
+
+**Shutdown.** On SIGTERM Keycloak fails readiness at once, keeps serving for `shutdown-delay`, then stops within `shutdown-timeout` (10s). Keycloak's own delay is 1s, too short for a load balancer that still sends requests, so the chart sets `config.shutdown-delay: 15s`. Measured: readiness answers 503 within 0.5 s of SIGTERM, liveness stays 200, ports 8080 and 9000 keep answering for the delay, and two nodes signalled together both exited after about 16 s. Behind an ALB the examples use `30s`. Keep `terminationGracePeriodSeconds` (60) above `shutdown-delay` + 10s.
+
+**Rollouts.** A StatefulSet replaces one pod at a time; `podManagementPolicy: Parallel` only affects scaling. The deploy tool must wait longer than `replicas x (shutdown-delay + start-to-ready + load-balancer registration) + margin`. Measure the numbers on dev. By estimate, Flux's default `timeout: 5m` and Terraform's 300 s are too short for three replicas behind an ALB; the estimates and per-tool settings are in [docs/upgrading.md](docs/upgrading.md#timeouts).
+
+**Readiness and the database.** `/health/ready` includes a database check, which exists only while metrics are enabled; this is why the chart always enables them. A database outage takes every pod out of the Service at once. That is intended; the liveness probe does not restart them.
+
+**ALB with `target-type: ip`.** Label the namespace `elbv2.k8s.aws/pod-readiness-gate-inject: enabled`, so that a new pod counts as Ready only when its ALB target is healthy, and set `deregistration_delay.timeout_seconds` in `alb.ingress.kubernetes.io/target-group-attributes` (the ALB default is 300 s). Verify on dev that a rolling restart under load shows no 5xx.
+
+## Upgrading Keycloak
+
+| Change | What happens | Do |
+|---|---|---|
+| Chart version only | No pod restart | Normal deploy |
+| Values, `config`, a rotated Secret | Rolling restart, one pod at a time | Normal deploy |
+| Patch release (26.8.x to 26.8.y) | Usually rolling-capable, but release notes can exclude one (26.8.1 to 26.8.2 is excluded) | Read the release notes; snapshot first |
+| Minor or major version (26.1 to 26.8) | The first new pod migrates the schema, one way. Old and new pods must not run together | Full stop: [docs/upgrading.md](docs/upgrading.md) |
+| `cache.stack` | Not rolling-capable: every pod must be stopped first | Full stop |
+
+Three rules:
+
+1. **Pin `image.tag`.** It is required, so only you change the Keycloak version. Take a database snapshot before any tag change.
+2. **A minor or major upgrade is a full stop:** scale to 0, back up, start one pod of the new version, wait until it is Ready, scale back. A new node migrates the schema as soon as it starts, and no probe notices an old node next to it.
+3. **Never roll a version change back automatically.** No Flux remediation, no `helm upgrade --atomic`, no `helm rollback`: they start the old version on the migrated schema. Rollback is the database backup plus the old tag.
+
+**The guard.** With `upgradeGuard: true` (the default) the chart reads the live StatefulSet and refuses to render a rolling update onto another `major.minor` while more than one pod runs or is wanted:
+
+```text
+Error: UPGRADE FAILED: execution error at (keycloak/templates/statefulset.yaml:<line>): Keycloak 26.7.3 -> 26.8.2
+changes the major.minor version while 3 pod(s) run and 3 are wanted: a RollingUpdate would run both versions ...
+```
+
+Nothing has changed in the cluster when you see it: follow the runbook. The guard reads the versions from the image tags, is inert under `helm template` and Argo CD, and sees neither patch releases, nor a `cache.stack` change, nor a rollback.
+
+[docs/upgrading.md](docs/upgrading.md) has the reasons, what bounds a migration, the timeouts, step-by-step runbooks for Flux and the Helm CLI, and the rollback order.
+
+## Migrating from the Bitnami chart
+
+[docs/migrating-from-bitnami.md](docs/migrating-from-bitnami.md) covers the move from Bitnami's `keycloak` chart to this one on the same database: the commands that read the live release, a mapping of values, the cut-over and a rehearsal checklist. The points that hurt most:
+
+- The image, usually the Keycloak version, and the cache stack change together: it is a full stop.
+- Set `database.schema` to the schema the Bitnami release used, or Keycloak initialises a new, empty one.
+- `hostname.url` must give the same issuer as before; `service.port` must keep the port that clients inside the cluster use.
+- Existing Admin API clients need the `kc-admin-api` scope after an upgrade to 26.8.2.
+
+## Hooks
+
+### Realm import
+
+`realmImport.enabled` adds a post-install and post-upgrade Job that applies realm files with [keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli), idempotently, through the chart's Service.
+
+```yaml
+realmImport:
+  enabled: true
+  image:
+    tag: "6.5.1-26.5.5"
+    digest: sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
+  auth:
+    clientId:
+      value: realm-import
+    clientSecret:
+      secretKeyRef: {name: keycloak-credentials, key: realm_import_client_secret}
+  realms:
+    customers.json:
+      realm: customers
+      enabled: true
+      bruteForceProtected: true
+```
+
+- **`realmImport.image.tag` is required.** The tag carries the Keycloak version the build is for. The newest build is `6.5.1-26.5.5`; it was not run against 26.8.2: verify on dev.
+- **`realmImport.auth` is required;** the hook does not use `bootstrapAdmin`. Either `clientId` + `clientSecret` (recommended; it wins when both are set): a master-realm client with service accounts enabled and the scope and roles below. Or `username` + `password`: an admin user, through the password grant on `admin-cli`.
+- **Realm files** come from `realmImport.realms` (real YAML, rendered to JSON in a ConfigMap) or from `realmImport.existingConfigMap`.
+- **The pod** runs under the ServiceAccount `<fullname>-hooks`, which the chart creates without annotations and shares with the test pod; its token is not mounted. Never Keycloak's own account: on EKS that would hand a third-party image Keycloak's IAM role. `realmImport.serviceAccountName` overrides it. The pod inherits `nodeSelector`, `tolerations`, `priorityClassName`, `imagePullSecrets` and the node affinity of `affinity`.
+- **Timing.** The hook runs inside `helm upgrade`, for at most `activeDeadlineSeconds` (900). It starts after the pods are Ready only when the deploy tool waits (`--wait`, Flux by default). Its availability check of up to 300 s logs in and calls the Admin API, so wrong credentials or a missing scope show up only after five minutes, as "Could not connect to keycloak in ... seconds". A failed hook fails the release.
+- **Not rendered at `replicaCount: 0`** (without autoscaling): the hook needs a running Keycloak.
+- **Rotating the client secret:** regenerate it in Keycloak first, then update the Secret. Changing only the Secret makes the next hook fail with 401.
+
+What the hook's client may do (tested on 26.8.2 at the level of the Admin API):
+
+| The client has | Result |
+|---|---|
+| No `kc-admin-api` client scope | 401. A new client does not get the scope by itself |
+| `kc-admin-api` and the master-realm role `create-realm` | It can create realms and fully manage the realms **it created itself** (the creator gets that realm's `<realm>-realm` client roles). The server info answers 200 but without `systemInfo`, so without the server version, unless the client has the role `admin`; by its source, keycloak-config-cli 6.5.1 then falls back to its build version (read, not run) |
+| The same, on a realm it did not create | `PUT` answers 403: every realm of a migrated database, and every realm the bootstrap account created. Grant the client that realm's `<realm>-realm` client roles in the master realm. The role `admin` works too, but prefer the per-realm roles |
+
+### The first run on a new database
+
+On an empty database only the temporary admin of `bootstrapAdmin` exists. Use it for one thing: to create the permanent identities. Then let the permanent client create the realms, so that it owns them. Install with `bootstrapAdmin.client` set and `realmImport.enabled: false`, then, in the Keycloak container (`kubectl exec`, `/opt/keycloak/bin`), with `--config /tmp/kcadm.config` added to every call:
+
+```bash
+kcadm.sh config credentials --server http://localhost:8080 --realm master --client <bootstrap-client-id> --secret <secret>
+kcadm.sh create users -r master -s username=<admin> -s enabled=true
+kcadm.sh set-password -r master --username <admin> --new-password <password>
+kcadm.sh add-roles -r master --uusername <admin> --rolename admin
+kcadm.sh create clients -r master -s clientId=realm-import -s publicClient=false -s serviceAccountsEnabled=true \
+  -s standardFlowEnabled=false -s secret=<secret>
+kcadm.sh update clients/<client-uuid>/default-client-scopes/<kc-admin-api-scope-uuid> -r master
+kcadm.sh add-roles -r master --uusername service-account-realm-import --rolename create-realm
+kcadm.sh config credentials --server http://localhost:8080 --realm master --user <admin> --password <password>
+kcadm.sh delete clients/<bootstrap-client-uuid> -r master
+```
+
+The second `config credentials` logs in as the permanent admin before the temporary account is deleted. The two ids in the `update` line come from `kcadm.sh get clients -r master -q clientId=realm-import --fields id` and `kcadm.sh get client-scopes -r master --fields id,name`. Tested in this order: no lock-out, the permanent client then created and updated a realm, and the permanent admin still administered the master realm. Afterwards set `realmImport.enabled: true` with `realmImport.auth` pointing at the permanent client, and remove `bootstrapAdmin` from the values.
+
+A shortcut also works at API level: point `realmImport.auth` at the id and Secret of `bootstrapAdmin.client` (the temporary account already carries `kc-admin-api`). But the realms then belong to the temporary account, and the permanent client needs their `<realm>-realm` roles afterwards.
+
+### Secrets in realm files
+
+`realmImport.varSubstitution: true` lets a realm file say `$(env:NAME)`; pass the variable with `realmImport.extraEnv`. It is off by default: with it, whoever can edit the realm files can read the hook's environment and files through `$(env:...)` and `$(file:...)`.
+
+### helm test
+
+`helm test <release>` runs a pod that checks `/health/ready` on the management port and `/realms/master/.well-known/openid-configuration` through the Service, each up to 12 times, 5 s apart: about 2 minutes per check at worst, inside `helm test`'s 5-minute default. It needs running pods, so switch it off in the deploy tool while `replicaCount` is 0 (Flux: `spec.test.enable: false`).
+
+## Operations notes
+
+**`kcadm.sh` in the pod.** The root filesystem is read-only, so kcadm needs its config file under `/tmp`, on every call: `--config /tmp/kcadm.config`.
+
+**Turning autoscaling on later.** `autoscaling.enabled: true` on a running release removes `spec.replicas` from the manifest. Kubernetes documents that this drops the workload to one replica once, until the HPA acts. Do it in a quiet window.
+
+**HPA scale-down.** The default behavior removes one pod per two minutes after a 300 s window. Do not replace it with a stateless default: several cache members leaving at once can lose logins in progress.
+
+**Karpenter.** Do not put `karpenter.sh/do-not-disrupt: "true"` on every replica through `podAnnotations`: it blocks consolidation and leaves expired nodes (`expireAfter`) stuck draining. The PodDisruptionBudget already makes drains take one pod at a time, and `unhealthyPodEvictionPolicy: AlwaysAllow` lets a drain evict a pod that is not Ready. The one exception is the single pod of a version upgrade, annotated by hand for the window.
+
+**Immutable fields.** The StatefulSet selects `app.kubernetes.io/name`, `instance` and `component: keycloak`. The selector, `serviceName` and `podManagementPolicy` are immutable: changing `nameOverride`, the release name or `podManagementPolicy` means deleting the StatefulSet first, or picking another `fullnameOverride`. The StatefulSet name is limited to 52 characters.
+
+**Why a StatefulSet without volumes.** Keycloak keeps no data on disk here. The StatefulSet is there for stable pod names, which become the cache node names, and for its one-at-a-time rollout.
+
+**Metrics.** `/metrics` is always on, on the management port; an empty `http.managementRelativePath` inherits `http.relativePath` as its path prefix. With the Prometheus Operator, `serviceMonitor.enabled` renders a ServiceMonitor; any other scraper needs the port opened in `networkPolicy.metricsFrom`. Mind the cardinality of the optional histograms: `cache-metrics-histograms-enabled: true` added 6,279 series on one idle pod.
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}
